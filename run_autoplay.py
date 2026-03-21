@@ -137,9 +137,10 @@ def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop
         time.sleep(0.05)
 
 
-async def run_session(total_games):
-    """Run one session: start MITM/browser/bot, play N games, then tear down.
+async def run_session(total_games, mitm_client):
+    """Run one session: start browser/bot, play N games, then tear down.
 
+    MITM proxy is kept alive across sessions; only the browser restarts.
     Returns the number of games played in this session.
     """
     global running, pending_action, game_active
@@ -150,15 +151,11 @@ async def run_session(total_games):
     game_started_event.clear()
     game_ended_event.clear()
 
-    # Per-session components
-    mitm_client = Client()
+    # Per-session components (MITM is passed in from main)
     mjai_controller = Controller()
     mjai_bot = AkagiBot()
     jsonl_logger = JsonlLogger()
     session_stop = threading.Event()
-
-    mitm_client.start()
-    logger.info("MITM proxy started")
 
     game_thread = threading.Thread(
         target=game_loop,
@@ -312,7 +309,6 @@ async def run_session(total_games):
         game_thread.join(timeout=5)
         jsonl_logger.close()
         await automation.close()
-        mitm_client.stop()
 
     return session_game_count
 
@@ -348,10 +344,15 @@ async def main():
 
     total_games = 0
 
+    # MITM proxy lives for the entire process lifetime
+    mitm_client = Client()
+    mitm_client.start()
+    logger.info("MITM proxy started")
+
     try:
         while running:
             logger.info(f"--- Starting new session (total games so far: {total_games}) ---")
-            session_games = await run_session(total_games)
+            session_games = await run_session(total_games, mitm_client)
             total_games += session_games
 
             if not running:
@@ -363,6 +364,7 @@ async def main():
         logger.info("Interrupted by user")
     finally:
         running = False
+        mitm_client.stop()
         watcher.stop()
         logger.info(f"Akagi (Full-Auto) stopped. Total games played: {total_games}")
 
