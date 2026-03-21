@@ -1,3 +1,5 @@
+[中文文档](README_ZH.md)
+
 # Majsoul Autopilot
 
 > **Disclaimer**: This project is for educational and research purposes only. The author is not responsible for any consequences such as account bans resulting from the use of this tool.
