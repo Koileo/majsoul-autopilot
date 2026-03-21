@@ -1,6 +1,6 @@
 # Majsoul Autopilot
 
-> **Disclaimer**: This project is for educational and research purposes only. The author is not responsible for any consequences such as account bans resulting from the use of this tool. **Not recommended for ranked play.**
+> **Disclaimer**: This project is for educational and research purposes only. The author is not responsible for any consequences such as account bans resulting from the use of this tool.
 
 A full-auto Majsoul mahjong player powered by [Mortal](https://github.com/Equim-chan/Mortal) AI. Automatically logs in, queues for matches, plays games, and repeats — completely unattended.
 
@@ -12,7 +12,6 @@ Based on [Akagi](https://github.com/shinkuan/Akagi) by [shinkuan](https://github
 - **Mortal AI**: Uses pre-trained Mortal model (currently 4-player south only)
 - **WebUI dashboard**: Real-time game state viewer at `http://localhost:3002`
 - **Periodic restart**: Soft-restarts browser every N games for stability
-- **Error recovery**: Auto-recovers from stuck states and connection issues
 
 ## Requirements
 
