@@ -1,0 +1,148 @@
+# Majsoul Autopilot
+
+A full-auto Majsoul (雀魂) mahjong player powered by [Mortal](https://github.com/Equim-chan/Mortal) AI. Automatically logs in, queues for matches, plays games, and repeats — completely unattended.
+
+## Features
+
+- **Full automation**: login → match → play → repeat
+- **Mortal AI**: Uses pre-trained Mortal models for both 4-player and 3-player mahjong
+- **Auto model switching**: Detects game type and switches between 4p/3p models
+- **WebUI dashboard**: Real-time game state viewer at `http://localhost:3002`
+- **Periodic restart**: Soft-restarts browser every N games for stability
+- **Error recovery**: Auto-recovers from stuck states and connection issues
+
+## Requirements
+
+- Python >= 3.12
+- Node.js (for building WebUI, optional if using pre-built assets)
+- Mortal model weights (`mortal.pth`)
+
+## Installation
+
+### 1. Clone and install dependencies
+
+```bash
+git clone <repo-url>
+cd majsoul-autopilot
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate   # Windows
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Install Playwright browser
+playwright install chromium
+```
+
+### 2. Configure settings
+
+```bash
+cp settings/settings.json.example settings/settings.json
+```
+
+Edit `settings/settings.json`:
+
+```json
+{
+  "autoplay_account": {
+    "username": "your_email@example.com",
+    "password": "your_password"
+  },
+  "autoplay_mode": {
+    "type": "4p_south",
+    "room": "gold"
+  }
+}
+```
+
+Key settings:
+
+| Field | Description | Options |
+|-------|-------------|---------|
+| `autoplay_mode.type` | Game type | `4p_south`, `4p_east`, `3p_south`, `3p_east` |
+| `autoplay_mode.room` | Room tier | `bronze`, `silver`, `gold`, `jade`, `throne` |
+| `autoplay_headless` | Hide browser window | `true` / `false` |
+| `autoplay_time` | Action delays (seconds) | Timing config for human-like play |
+| `webui_port` | WebUI server port | Default: `3002` |
+| `model_path` | Mortal model file | Relative to `mjai_bot/mortal/` |
+
+### 3. Place model weights
+
+Download the Mortal model file and place it at:
+
+```
+mjai_bot/mortal/mortal.pth      # 4-player model
+mjai_bot/mortal3p/mortal.pth    # 3-player model (optional)
+```
+
+### 4. Build WebUI (optional)
+
+Pre-built assets are included. To rebuild after modifying the frontend:
+
+```bash
+cd webui
+npm install
+npm run build
+```
+
+## Usage
+
+```bash
+python run_autoplay.py
+```
+
+The program will:
+1. Start the MITM proxy (intercepts game protocol)
+2. Launch the WebUI at `http://localhost:3002`
+3. Open a Chromium browser and navigate to Majsoul
+4. Log in with your configured account
+5. Start queuing for matches and playing automatically
+
+### WebUI
+
+Open `http://localhost:3002` in your browser to see:
+- Real-time game board with all players' discards and melds
+- Your hand tiles and tsumo
+- AI recommendations (top 3 actions with probabilities)
+- Riichi declarations with sideways tiles
+
+### Stopping
+
+Press `Ctrl+C` to gracefully stop. The program will finish the current action and clean up.
+
+## Architecture
+
+```
+Browser (Playwright/Chromium)
+    ↕ WebSocket (via MITM proxy)
+MITM Proxy (mitmproxy)
+    ↕ Liqi Protocol → MJAI format
+Game Loop Thread
+    ↕ MJAI messages
+Mortal AI Model
+    ↕ Action recommendation
+Browser Automation (JS injection)
+    → Execute action in game
+```
+
+## Project Structure
+
+```
+majsoul-autopilot/
+├── run_autoplay.py          # Main entry point
+├── settings/                # Configuration
+├── mjai_bot/                # AI models & inference
+│   ├── mortal/              # 4-player model + libriichi
+│   └── mortal3p/            # 3-player model + libriichi
+├── mitm/                    # MITM proxy & protocol bridges
+├── autoplay/                # Browser automation & action execution
+├── akagi/                   # Game state processing & WebUI server
+└── webui/                   # React frontend source
+```
+
+## License
+
+This project is for educational and research purposes only.
