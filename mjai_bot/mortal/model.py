@@ -388,7 +388,7 @@ def load_model(seat: int) -> Bot:
 
     # Load model path from settings (configurable), fallback to mortal.pth
     from settings.settings import settings as app_settings
-    control_state_file = getattr(app_settings, 'model_path', 'mortal.pth')
+    control_state_file = getattr(app_settings, 'model_path', '../../mortal.pth')
     control_state_file = pathlib.Path(control_state_file)
 
     # Support absolute path or relative to project root

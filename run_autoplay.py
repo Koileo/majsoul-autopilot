@@ -87,18 +87,25 @@ def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop
                           and msg.get("pai", "?") != "?"):
                         last_tsumo_tile = msg["pai"]
 
-                # Handle riichi: Mortal returns "reach" without a tile.
-                # We attach the tsumo tile so execute_action can send
-                # inputOperation type=7 with the correct tile.
+                # Handle riichi: Mortal returns "reach" without specifying
+                # which tile to discard. Feed the reach event back to the
+                # model — it will respond with a dahai indicating the tile.
                 if (game_active and mjai_response
                         and mjai_response.get("type") == "reach"
                         and not mjai_response.get("pai")):
-                    if last_tsumo_tile:
+                    reach_event = {"type": "reach", "actor": player_id}
+                    dahai_response = mjai_controller.react([reach_event])
+                    if dahai_response and dahai_response.get("type") == "dahai":
+                        mjai_response["pai"] = dahai_response["pai"]
+                        mjai_response["tsumogiri"] = dahai_response.get("tsumogiri", False)
+                        logger.info(f"Riichi: model chose {dahai_response['pai']} "
+                                    f"(tsumogiri={mjai_response['tsumogiri']})")
+                    elif last_tsumo_tile:
                         mjai_response["pai"] = last_tsumo_tile
                         mjai_response["tsumogiri"] = True
-                        logger.info(f"Riichi: using tsumo tile {last_tsumo_tile}")
+                        logger.warning(f"Riichi: model didn't return dahai, fallback to tsumo {last_tsumo_tile}")
                     else:
-                        logger.warning("Riichi requested but no tsumo tile tracked")
+                        logger.warning("Riichi requested but no tile available")
 
                 # Debug: log every bot response
                 logger.debug(f"Bot response: {mjai_response}")

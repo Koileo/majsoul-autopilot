@@ -35,7 +35,9 @@ export function Recommendations({ top3, shanten, furiten, action }) {
     <div className={`recommendations ${showCallBanner ? 'recommendations-call' : ''}`}>
       <div className="rec-status">
         {shanten != null && (
-          <span className="status-item">向听: <strong>{shanten}</strong></span>
+          <span className="status-item">
+            <strong>{shanten < 0 ? '和牌' : shanten === 0 ? '听牌' : `${shanten}向听`}</strong>
+          </span>
         )}
         <span className="status-item">
           振听: <strong style={{ color: furiten ? '#DC2626' : '#16A34A' }}>

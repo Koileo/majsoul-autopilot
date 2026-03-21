@@ -2,6 +2,8 @@
 
 基于 [Mortal](https://github.com/Equim-chan/Mortal) AI 的雀魂全自动打牌工具。自动登录、匹配、打牌、循环，完全无人值守。
 
+本项目基于 [shinkuan](https://github.com/shinkuan) 的 [Akagi](https://github.com/shinkuan/Akagi) 开发。
+
 ## 功能
 
 - **全自动**：登录 → 匹配 → 打牌 → 循环
@@ -133,6 +135,12 @@ majsoul-autopilot/
 └── webui/                   # React 前端源码
 ```
 
-## 免责声明
+## 致谢
+
+本项目基于 [shinkuan](https://github.com/shinkuan) 的 [Akagi](https://github.com/shinkuan/Akagi) 开发，Akagi 提供了 MITM 代理、协议桥接和 Mortal Bot 集成。Majsoul Autopilot 将 Akagi 的 Textual TUI 界面替换为基于 Playwright 的浏览器自动化和 React WebUI 面板。
+
+## 许可证
+
+本项目使用与原 Akagi 项目相同的 **GNU Affero General Public License v3 附加 Commons Clause** 许可证。详见 [LICENSE.txt](LICENSE.txt)。
 
 本项目仅供学习和研究用途。

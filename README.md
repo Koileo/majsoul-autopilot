@@ -1,6 +1,8 @@
 # Majsoul Autopilot
 
-A full-auto Majsoul (雀魂) mahjong player powered by [Mortal](https://github.com/Equim-chan/Mortal) AI. Automatically logs in, queues for matches, plays games, and repeats — completely unattended.
+A full-auto Majsoul mahjong player powered by [Mortal](https://github.com/Equim-chan/Mortal) AI. Automatically logs in, queues for matches, plays games, and repeats — completely unattended.
+
+Based on [Akagi](https://github.com/shinkuan/Akagi) by [shinkuan](https://github.com/shinkuan).
 
 ## Features
 
@@ -133,6 +135,12 @@ majsoul-autopilot/
 └── webui/                   # React frontend source
 ```
 
+## Acknowledgements
+
+This project is built upon [Akagi](https://github.com/shinkuan/Akagi) by [shinkuan](https://github.com/shinkuan), which provides the MITM proxy, protocol bridges, and Mortal bot integration. Majsoul Autopilot replaces Akagi's Textual TUI with Playwright-based browser automation and a React WebUI dashboard.
+
 ## License
+
+This project is licensed under the **GNU Affero General Public License v3 with Commons Clause**, the same license as the original Akagi project. See [LICENSE.txt](LICENSE.txt) for details.
 
 This project is for educational and research purposes only.
