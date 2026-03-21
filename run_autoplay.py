@@ -40,7 +40,7 @@ from mjai_bot.controller import Controller
 from settings.settings import settings
 from autoplay.majsoul_automation import MajsoulAutomation
 
-MAX_GAMES_BEFORE_RESTART = 3  # Restart after this many games for stability
+MAX_GAMES_BEFORE_RESTART = 3  # Soft-restart browser/MITM after this many games
 
 running = True
 # Shared state between game_loop thread and async main
@@ -57,13 +57,13 @@ def signal_handler(sig, frame):
     running = False
 
 
-def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger):
+def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop):
     """Process game messages and store actions for the automation to execute."""
     global running, pending_action, game_active
 
     last_tsumo_tile = None  # Track our last drawn tile for riichi
 
-    while running:
+    while running and not session_stop.is_set():
         try:
             result = process_messages(mitm_client, mjai_controller, mjai_bot, jsonl_logger)
             if result:
@@ -130,77 +130,58 @@ def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger):
         time.sleep(0.05)
 
 
-async def main():
+async def run_session(total_games):
+    """Run one session: start MITM/browser/bot, play N games, then tear down.
+
+    Returns the number of games played in this session.
+    """
     global running, pending_action, game_active
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # Reset shared state
+    pending_action = None
+    game_active = False
+    game_started_event.clear()
+    game_ended_event.clear()
 
-    logger.info("Starting Akagi (Full-Auto mode)...")
-    logger.info(f"Mode: {settings.autoplay_mode.type} | Room: {settings.autoplay_mode.room}")
-
-    # Validate account settings
-    if not settings.autoplay_account.username or not settings.autoplay_account.password:
-        logger.error("Please configure autoplay_account in settings.json")
-        return
-
-    # Start MITM proxy
+    # Per-session components
     mitm_client = Client()
     mjai_controller = Controller()
     mjai_bot = AkagiBot()
     jsonl_logger = JsonlLogger()
+    session_stop = threading.Event()
 
     mitm_client.start()
     logger.info("MITM proxy started")
 
-    # Start WebUI server in background thread
-    webui_port = 3002
-    webui_thread = threading.Thread(
-        target=lambda: uvicorn.run(app, host="0.0.0.0", port=webui_port, log_level="warning"),
-        daemon=True,
-    )
-    webui_thread.start()
-
-    # Start file watcher for WebUI
-    watcher_thread = threading.Thread(
-        target=lambda: asyncio.run(watcher.start()),
-        daemon=True,
-    )
-    watcher_thread.start()
-    logger.info(f"WebUI available at http://localhost:{webui_port}")
-
-    # Start game processing loop in background thread
     game_thread = threading.Thread(
         target=game_loop,
-        args=(mitm_client, mjai_controller, mjai_bot, jsonl_logger),
+        args=(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop),
         daemon=True,
     )
     game_thread.start()
 
-    # Start browser automation
     automation = MajsoulAutomation()
-    game_count = 0
+    session_game_count = 0
+
     try:
         await automation.start_browser(proxy_port=settings.mitm.port)
         await automation.navigate_to_game()
 
-        # Wait for game engine to fully initialize
         if not await automation.wait_for_entrance():
             logger.error("Game failed to initialize")
-            return
+            return session_game_count
 
-        # Login via game's native JS API
         if not await automation.login(
             settings.autoplay_account.username,
             settings.autoplay_account.password,
         ):
             logger.error("Login failed")
-            return
+            return session_game_count
 
         lobby_result = await automation.wait_for_lobby()
         if lobby_result is None:
             logger.error("Failed to enter lobby or game")
-            return
+            return session_game_count
 
         if lobby_result == "game":
             logger.info("Auto-reconnected to game, will play it out first")
@@ -209,12 +190,12 @@ async def main():
 
         logger.info("Ready to play! Starting match loop...")
 
-        # Main loop: match → play → repeat
         consecutive_errors = 0
         while running:
             try:
-                game_count += 1
-                logger.info(f"=== Starting game #{game_count} ===")
+                session_game_count += 1
+                current_total = total_games + session_game_count
+                logger.info(f"=== Starting game #{current_total} (session #{session_game_count}) ===")
 
                 # Check if already in a game (auto-reconnected after login)
                 if game_active:
@@ -286,7 +267,7 @@ async def main():
                 if not running:
                     break
 
-                logger.info(f"Game #{game_count} ended")
+                logger.info(f"Game #{current_total} ended")
 
                 # Handle end-game screen and return to lobby
                 await automation.handle_end_game()
@@ -294,9 +275,9 @@ async def main():
 
                 logger.info("Returning to lobby for next game...")
 
-                # Periodic restart for stability
-                if game_count >= MAX_GAMES_BEFORE_RESTART:
-                    logger.info(f"Played {game_count} games, restarting for stability...")
+                # Periodic soft-restart for stability
+                if session_game_count >= MAX_GAMES_BEFORE_RESTART:
+                    logger.info(f"Played {session_game_count} games this session, soft-restarting...")
                     break
 
             except Exception as e:
@@ -312,17 +293,64 @@ async def main():
                 except Exception:
                     await asyncio.sleep(30)
 
-    except KeyboardInterrupt:
-        logger.info("Interrupted by user")
-    except Exception as e:
-        logger.error(f"Fatal error: {traceback.format_exc()}")
     finally:
-        running = False
-        watcher.stop()
+        session_stop.set()
+        game_thread.join(timeout=5)
         jsonl_logger.close()
         await automation.close()
         mitm_client.stop()
-        logger.info(f"Akagi (Full-Auto) stopped. Games played: {game_count}")
+
+    return session_game_count
+
+
+async def main():
+    global running
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    logger.info("Starting Akagi (Full-Auto mode)...")
+    logger.info(f"Mode: {settings.autoplay_mode.type} | Room: {settings.autoplay_mode.room}")
+
+    # Validate account settings
+    if not settings.autoplay_account.username or not settings.autoplay_account.password:
+        logger.error("Please configure autoplay_account in settings.json")
+        return
+
+    # Start WebUI server (persists across soft-restarts)
+    webui_port = settings.webui_port
+    webui_thread = threading.Thread(
+        target=lambda: uvicorn.run(app, host="0.0.0.0", port=webui_port, log_level="warning"),
+        daemon=True,
+    )
+    webui_thread.start()
+
+    watcher_thread = threading.Thread(
+        target=lambda: asyncio.run(watcher.start()),
+        daemon=True,
+    )
+    watcher_thread.start()
+    logger.info(f"WebUI available at http://localhost:{webui_port}")
+
+    total_games = 0
+
+    try:
+        while running:
+            logger.info(f"--- Starting new session (total games so far: {total_games}) ---")
+            session_games = await run_session(total_games)
+            total_games += session_games
+
+            if not running:
+                break
+
+            logger.info(f"Session done ({session_games} games). Restarting in 10s...")
+            await asyncio.sleep(10)
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+    finally:
+        running = False
+        watcher.stop()
+        logger.info(f"Akagi (Full-Auto) stopped. Total games played: {total_games}")
 
 
 if __name__ == "__main__":

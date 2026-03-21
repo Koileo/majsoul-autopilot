@@ -29,5 +29,6 @@
   },
   "autoplay": false,
   "auto_switch_model": true,
-  "recommendation_temperature": 0.3
+  "recommendation_temperature": 0.3,
+  "webui_port": 3002
 }

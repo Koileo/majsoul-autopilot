@@ -63,6 +63,7 @@ class Settings:
     autoplay_mode: AutoplayModeConfig
     autoplay_headless: bool
     model_path: str
+    webui_port: int
     def update(self, settings: dict) -> None:
         """
         Update settings from a dictionary
@@ -101,6 +102,8 @@ class Settings:
             self.autoplay_headless = settings["autoplay_headless"]
         if "model_path" in settings:
             self.model_path = settings["model_path"]
+        if "webui_port" in settings:
+            self.webui_port = settings["webui_port"]
         self.save_ot_settings()
 
     def save_ot_settings(self) -> None:
@@ -167,7 +170,8 @@ class Settings:
                     "room": self.autoplay_mode.room
                 },
                 "autoplay_headless": self.autoplay_headless,
-                "model_path": self.model_path
+                "model_path": self.model_path,
+                "webui_port": self.webui_port
             }, f, indent=4)
         # Save the settings to the file
         logger.info(f"Saved settings to {FILE_PATH / 'settings.json'}")
@@ -279,7 +283,8 @@ def load_settings() -> Settings:
             room=settings.get("autoplay_mode", {}).get("room", "gold")
         ),
         autoplay_headless=settings.get("autoplay_headless", False),
-        model_path=settings.get("model_path", "mortal.pth")
+        model_path=settings.get("model_path", "mortal.pth"),
+        webui_port=settings.get("webui_port", 3002)
     )
 
 def get_schema() -> dict:

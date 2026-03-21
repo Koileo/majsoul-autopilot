@@ -109,6 +109,12 @@
     "model_path": {
       "type": "string",
       "description": "Path to the Mortal model file (.pth), relative to mjai_bot/mortal/ directory."
+    },
+    "webui_port": {
+      "type": "integer",
+      "description": "Port for the WebUI server.",
+      "minimum": 1,
+      "maximum": 65535
     }
   },
   "required": ["mitm", "model", "theme", "ot_server", "autoplay", "auto_switch_model", "recommendation_temperature"],
