@@ -389,9 +389,11 @@ def load_model(seat: int) -> Bot:
     # Load model path from settings (configurable), fallback to mortal.pth
     from settings.settings import settings as app_settings
     control_state_file = getattr(app_settings, 'model_path', 'mortal.pth')
+    control_state_file = pathlib.Path(control_state_file)
 
-    # Get the path of control_state_file = current directory / control_state_file
-    control_state_file = pathlib.Path(__file__).parent / control_state_file
+    # Support absolute path or relative to project root
+    if not control_state_file.is_absolute():
+        control_state_file = pathlib.Path.cwd() / control_state_file
     state = torch.load(control_state_file, map_location=device)
 
     mortal = Brain(version=state['config']['control']['version'], conv_channels=state['config']['resnet']['conv_channels'], num_blocks=state['config']['resnet']['num_blocks']).eval()

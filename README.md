@@ -5,8 +5,7 @@ A full-auto Majsoul (雀魂) mahjong player powered by [Mortal](https://github.c
 ## Features
 
 - **Full automation**: login → match → play → repeat
-- **Mortal AI**: Uses pre-trained Mortal models for both 4-player and 3-player mahjong
-- **Auto model switching**: Detects game type and switches between 4p/3p models
+- **Mortal AI**: Uses pre-trained Mortal model (currently 4-player south only)
 - **WebUI dashboard**: Real-time game state viewer at `http://localhost:3002`
 - **Periodic restart**: Soft-restarts browser every N games for stability
 - **Error recovery**: Auto-recovers from stuck states and connection issues
@@ -62,21 +61,16 @@ Key settings:
 
 | Field | Description | Options |
 |-------|-------------|---------|
-| `autoplay_mode.type` | Game type | `4p_south`, `4p_east`, `3p_south`, `3p_east` |
+| `autoplay_mode.type` | Game type | Currently only `4p_south` |
 | `autoplay_mode.room` | Room tier | `bronze`, `silver`, `gold`, `jade`, `throne` |
 | `autoplay_headless` | Hide browser window | `true` / `false` |
 | `autoplay_time` | Action delays (seconds) | Timing config for human-like play |
 | `webui_port` | WebUI server port | Default: `3002` |
-| `model_path` | Mortal model file | Relative to `mjai_bot/mortal/` |
+| `model_path` | Mortal model file | Absolute path or relative to project root |
 
 ### 3. Place model weights
 
-Download the Mortal model file and place it at:
-
-```
-mjai_bot/mortal/mortal.pth      # 4-player model
-mjai_bot/mortal3p/mortal.pth    # 3-player model (optional)
-```
+Download the Mortal model file, place it at `mjai_bot/mortal/mortal.pth` (default), and set `model_path` in `settings.json` accordingly.
 
 ### 4. Build WebUI (optional)
 
@@ -101,17 +95,7 @@ The program will:
 4. Log in with your configured account
 5. Start queuing for matches and playing automatically
 
-### WebUI
-
-Open `http://localhost:3002` in your browser to see:
-- Real-time game board with all players' discards and melds
-- Your hand tiles and tsumo
-- AI recommendations (top 3 actions with probabilities)
-- Riichi declarations with sideways tiles
-
-### Stopping
-
-Press `Ctrl+C` to gracefully stop. The program will finish the current action and clean up.
+Open `http://localhost:3002` to view real-time game state. Press `Ctrl+C` to stop.
 
 ## Architecture
 

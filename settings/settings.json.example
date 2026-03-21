@@ -1,5 +1,5 @@
 {
-  "model_path": "mortal.pth",
+  "model_path": "mjai_bot/mortal/mortal.pth",
   "autoplay_account": {
     "username": "your_email@example.com",
     "password": "your_password"

@@ -5,8 +5,7 @@
 ## 功能
 
 - **全自动**：登录 → 匹配 → 打牌 → 循环
-- **Mortal AI**：使用预训练的 Mortal 模型，支持四麻和三麻
-- **自动切换模型**：根据对局类型自动切换四麻/三麻模型
+- **Mortal AI**：使用预训练的 Mortal 模型（目前仅支持四人南）
 - **WebUI 面板**：实时对局状态查看，访问 `http://localhost:3002`
 - **定期重启**：每 N 局自动软重启浏览器，提高稳定性
 - **错误恢复**：自动从卡死状态和连接问题中恢复
@@ -62,21 +61,16 @@ cp settings/settings.json.example settings/settings.json
 
 | 字段 | 说明 | 可选值 |
 |------|------|--------|
-| `autoplay_mode.type` | 对局类型 | `4p_south`（四麻南）、`4p_east`（四麻东）、`3p_south`（三麻南）、`3p_east`（三麻东） |
+| `autoplay_mode.type` | 对局类型 | 目前仅支持 `4p_south`（四人南） |
 | `autoplay_mode.room` | 房间等级 | `bronze`（铜）、`silver`（银）、`gold`（金）、`jade`（玉）、`throne`（王座） |
 | `autoplay_headless` | 隐藏浏览器窗口 | `true` / `false` |
 | `autoplay_time` | 操作延迟（秒） | 模拟人类操作的时间间隔 |
 | `webui_port` | WebUI 端口 | 默认 `3002` |
-| `model_path` | 模型文件路径 | 相对于 `mjai_bot/mortal/` 目录 |
+| `model_path` | 模型文件路径 | 绝对路径或相对于项目根目录的路径 |
 
 ### 3. 放置模型文件
 
-下载 Mortal 模型文件，放到以下位置：
-
-```
-mjai_bot/mortal/mortal.pth      # 四麻模型
-mjai_bot/mortal3p/mortal.pth    # 三麻模型（可选）
-```
+下载 Mortal 模型文件，默认放到 `mjai_bot/mortal/mortal.pth`，然后在 `settings.json` 中配置 `model_path`。
 
 ### 4. 构建 WebUI（可选）
 
@@ -101,18 +95,7 @@ python run_autoplay.py
 4. 使用配置的账号登录
 5. 自动开始匹配和打牌
 
-### WebUI 面板
-
-在浏览器中打开 `http://localhost:3002` 可以看到：
-- 实时牌桌：所有玩家的牌河和副露
-- 手牌和自摸牌
-- AI 推荐（前 3 个操作及概率）
-- 对手剩余手牌数量（暗牌显示）
-- 立直宣言横置显示
-
-### 停止运行
-
-按 `Ctrl+C` 优雅停止。程序会完成当前操作后清理退出。
+打开 `http://localhost:3002` 查看实时对局状态。按 `Ctrl+C` 停止。
 
 ## 架构
 
