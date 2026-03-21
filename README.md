@@ -1,5 +1,7 @@
 # Majsoul Autopilot
 
+> **Disclaimer**: This project is for educational and research purposes only. The author is not responsible for any consequences such as account bans resulting from the use of this tool. **Not recommended for ranked play.**
+
 A full-auto Majsoul mahjong player powered by [Mortal](https://github.com/Equim-chan/Mortal) AI. Automatically logs in, queues for matches, plays games, and repeats — completely unattended.
 
 Based on [Akagi](https://github.com/shinkuan/Akagi) by [shinkuan](https://github.com/shinkuan).
@@ -73,6 +75,8 @@ Key settings:
 ### 3. Place model weights
 
 Download the Mortal model file, place it at `mjai_bot/mortal/mortal.pth` (default), and set `model_path` in `settings.json` accordingly.
+
+Model download: [VoidShine/mortal-298k](https://huggingface.co/VoidShine/mortal-298k)
 
 ### 4. Build WebUI (optional)
 

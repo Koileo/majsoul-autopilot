@@ -1,5 +1,7 @@
 # 雀魂自动打牌
 
+> **免责声明**：本项目仅供学习和研究用途。使用本工具造成的账号封禁等后果由使用者自行承担，作者不承担任何责任。**不建议在排位赛中使用。**
+
 基于 [Mortal](https://github.com/Equim-chan/Mortal) AI 的雀魂全自动打牌工具。自动登录、匹配、打牌、循环，完全无人值守。
 
 本项目基于 [shinkuan](https://github.com/shinkuan) 的 [Akagi](https://github.com/shinkuan/Akagi) 开发。
@@ -73,6 +75,8 @@ cp settings/settings.json.example settings/settings.json
 ### 3. 放置模型文件
 
 下载 Mortal 模型文件，默认放到 `mjai_bot/mortal/mortal.pth`，然后在 `settings.json` 中配置 `model_path`。
+
+模型下载地址：[VoidShine/mortal-298k](https://huggingface.co/VoidShine/mortal-298k)
 
 ### 4. 构建 WebUI（可选）
 
