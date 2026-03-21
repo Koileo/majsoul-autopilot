@@ -40,7 +40,7 @@ from mjai_bot.controller import Controller
 from settings.settings import settings
 from autoplay.majsoul_automation import MajsoulAutomation
 
-MAX_GAMES_BEFORE_RESTART = 3  # Soft-restart browser/MITM after this many games
+MAX_GAMES_BEFORE_RESTART = 1  # Soft-restart browser/MITM after this many games
 
 running = True
 # Shared state between game_loop thread and async main
