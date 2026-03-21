@@ -97,6 +97,12 @@ python run_autoplay.py
 
 打开 `http://localhost:3002` 查看实时对局状态。按 `Ctrl+C` 停止。
 
+如果只想查看 WebUI 而不自动打牌：
+
+```bash
+python run_webui.py
+```
+
 ## 架构
 
 ```

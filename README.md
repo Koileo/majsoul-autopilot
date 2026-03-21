@@ -97,6 +97,12 @@ The program will:
 
 Open `http://localhost:3002` to view real-time game state. Press `Ctrl+C` to stop.
 
+To run WebUI only (no autoplay):
+
+```bash
+python run_webui.py
+```
+
 ## Architecture
 
 ```
