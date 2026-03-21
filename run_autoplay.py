@@ -204,13 +204,15 @@ async def run_session(total_games):
                     # Start match queue via RPC
                     if not await automation.start_match():
                         consecutive_errors += 1
-                        wait_time = min(30 * consecutive_errors, 120)
-                        logger.error(f"Failed to start match queue, retrying in {wait_time}s... "
-                                     f"(attempt {consecutive_errors}/5)")
+                        logger.error(f"Failed to start match queue (attempt {consecutive_errors}/5)")
                         if consecutive_errors >= 5:
                             logger.error("Too many consecutive errors, stopping")
                             break
-                        await asyncio.sleep(wait_time)
+                        # Recover instead of blind retry — likely not in lobby
+                        logger.info("Recovering to get back to lobby...")
+                        if await automation.recover():
+                            continue
+                        await asyncio.sleep(30)
                         continue
 
                     consecutive_errors = 0
@@ -270,9 +272,14 @@ async def run_session(total_games):
                 logger.info(f"Game #{current_total} ended")
 
                 # Handle end-game screen and return to lobby
-                await automation.handle_end_game()
+                if not await automation.handle_end_game():
+                    logger.warning("Failed to return to lobby, recovering...")
+                    if not await automation.recover():
+                        logger.error("Recovery failed after end game")
+                        break
                 await asyncio.sleep(3)
 
+                consecutive_errors = 0
                 logger.info("Returning to lobby for next game...")
 
                 # Periodic soft-restart for stability

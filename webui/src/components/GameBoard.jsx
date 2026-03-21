@@ -5,13 +5,30 @@ import { Recommendations } from './Recommendations';
 import { Tile } from './Tile';
 import { Meld } from './Meld';
 
-function PlayerMelds({ melds, actor }) {
-  if (!melds || melds.length === 0) return null;
+function concealedCount(melds) {
+  let count = 13;
+  for (const m of melds) {
+    count -= (m.consumed?.length || 0);
+  }
+  return Math.max(0, count);
+}
+
+function OpponentHand({ melds, actor }) {
+  const backCount = concealedCount(melds);
   return (
-    <div className="player-melds">
-      {melds.map((m, i) => (
-        <Meld key={i} meld={m} actor={actor} small />
-      ))}
+    <div className="opponent-hand">
+      <div className="opponent-hand-tiles">
+        {Array.from({ length: backCount }, (_, i) => (
+          <Tile key={`b-${i}`} tile="?" small faceDown />
+        ))}
+      </div>
+      {melds.length > 0 && (
+        <div className="opponent-melds">
+          {melds.map((m, i) => (
+            <Meld key={i} meld={m} actor={actor} small />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -47,18 +64,14 @@ export function GameBoard({ state }) {
       <div className="table-area">
         <div className="player-area player-toimen">
           {playerLabel(toimen, '对家')}
-          <div className="player-content-row">
-            <DiscardPile discards={discards[toimen]} compact />
-            <PlayerMelds melds={melds[toimen]} actor={toimen} />
-          </div>
+          <OpponentHand melds={melds[toimen]} actor={toimen} />
+          <DiscardPile discards={discards[toimen]} compact />
         </div>
         <div className="table-middle">
           <div className="player-area player-kamicha">
             {playerLabel(kamicha, '上家')}
-            <div className="player-content-row">
-              <DiscardPile discards={discards[kamicha]} compact />
-              <PlayerMelds melds={melds[kamicha]} actor={kamicha} />
-            </div>
+            <OpponentHand melds={melds[kamicha]} actor={kamicha} />
+            <DiscardPile discards={discards[kamicha]} compact />
           </div>
           <div className="table-center">
             <div className="center-info">
@@ -73,10 +86,8 @@ export function GameBoard({ state }) {
           </div>
           <div className="player-area player-shimocha">
             {playerLabel(shimocha, '下家')}
-            <div className="player-content-row">
-              <DiscardPile discards={discards[shimocha]} compact />
-              <PlayerMelds melds={melds[shimocha]} actor={shimocha} />
-            </div>
+            <OpponentHand melds={melds[shimocha]} actor={shimocha} />
+            <DiscardPile discards={discards[shimocha]} compact />
           </div>
         </div>
         <div className="player-area player-self">

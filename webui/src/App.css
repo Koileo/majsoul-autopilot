@@ -114,10 +114,12 @@ body {
 
 .discard-pile { display: grid; grid-template-columns: repeat(6, auto); gap: 2px; justify-content: start; align-content: start; }
 .player-toimen .discard-pile,
-.player-self .discard-pile { min-height: 170px; }
-.discard-compact .tile-sm { width: 24px; height: 32px; font-size: 0.75em; }
+.player-self .discard-pile { min-height: 200px; }
+.discard-compact .tile-sm { width: 28px; height: 38px; font-size: 0.8em; }
 
-.player-content-row { display: flex; gap: 12px; align-items: flex-start; }
+.opponent-hand { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 6px; }
+.opponent-hand-tiles { display: flex; gap: 1px; }
+.opponent-melds { display: flex; gap: 8px; align-items: flex-end; }
 .player-melds { display: flex; gap: 8px; align-items: flex-start; flex-shrink: 0; }
 .meld { display: flex; gap: 1px; }
 

@@ -24,11 +24,11 @@
   pointer-events: none;
 }
 .tile-back {
-  background: linear-gradient(135deg, #D97706 0%, #B45309 100%);
-  border-color: #92400E;
+  background: linear-gradient(135deg, #C4B5A0 0%, #A89882 100%);
+  border-color: #9A8B74;
 }
 .tile-back .tile-img {
-  opacity: 0.3;
+  opacity: 0.15;
 }
 .tile-highlighted {
   border: 2px solid #D97706;
