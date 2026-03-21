@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# IDE
+.idea/
+
+# Browser profile (Playwright/Chromium data)
+.browser_profile/
+
+# Logs
+logs/
+
+# Model weights
+*.pth
+*.onnx
+*.bin
+
+# Settings with credentials
+settings/settings.json
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
