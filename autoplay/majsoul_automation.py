@@ -112,6 +112,10 @@ class MajsoulAutomation:
         )
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
 
+        # Clear cookies so each launch starts fresh (no "already logged in")
+        # Persistent profile is kept only for game asset caching
+        await self.context.clear_cookies()
+
         # Inject WebSocket hook before any page loads
         hook_js = (JS_DIR / "hook_websocket.js").read_text()
         await self.context.add_init_script(hook_js)
@@ -121,7 +125,10 @@ class MajsoulAutomation:
     async def navigate_to_game(self):
         """Open Majsoul website and wait for game engine to load."""
         await self.page.goto(MAJSOUL_URL, wait_until="domcontentloaded", timeout=120000)
-        logger.info("Majsoul page loaded")
+        # Clear game's localStorage to force fresh login (must be on game origin)
+        await self.page.evaluate("try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}")
+        await self.page.reload(wait_until="domcontentloaded", timeout=120000)
+        logger.info("Majsoul page loaded (fresh session)")
 
     async def wait_for_entrance(self, timeout: float = 180):
         """Wait for the game to fully initialize to the entrance screen."""
