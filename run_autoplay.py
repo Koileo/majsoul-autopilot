@@ -255,6 +255,22 @@ async def run_session(total_games, mitm_client):
 
                     await asyncio.sleep(0.1)
 
+                    # Fast recovery: MITM detected all WebSocket connections closed
+                    if mitm_client.ws_disconnected.is_set():
+                        logger.warning("WebSocket disconnected mid-game — recovering immediately")
+                        mitm_client.ws_disconnected.clear()
+                        game_active = False
+                        game_ended_event.set()
+                        if await automation.recover():
+                            lobby_result = await automation.wait_for_lobby()
+                            if lobby_result == "game":
+                                logger.info("Reconnected to game after WS recovery")
+                                game_active = True
+                                game_started_event.set()
+                                last_action_time = time.time()
+                                continue
+                        break
+
                     # Watchdog: if no action for 120s during a game, assume stuck
                     if time.time() - last_action_time > 120:
                         logger.warning("No actions for 120s, game may be stuck — recovering")

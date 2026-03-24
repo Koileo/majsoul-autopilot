@@ -17,6 +17,8 @@ from .logger import logger
 activated_flows: list[str] = [] # store all flow.id ([-1] is the recently opened)
 majsoul_bridges: dict[str, MajsoulBridge] = {} # store all flow.id -> MajsoulBridge
 mjai_messages: queue.Queue[dict] = queue.Queue() # store all messages
+ws_disconnected = threading.Event()
+_MAX_WS_MESSAGES = 50
 
 
 class ClientWebSocket(ClientWebSocketABC):
@@ -28,7 +30,7 @@ class ClientWebSocket(ClientWebSocketABC):
         assert isinstance(flow.websocket, mitmproxy.websocket.WebSocketData)
         global activated_flows, majsoul_bridges
         logger.info(f"WebSocket connection opened: {flow.id}")
-        
+        ws_disconnected.clear()
         activated_flows.append(flow.id)
         majsoul_bridges[flow.id] = MajsoulBridge()
 
@@ -59,6 +61,10 @@ class ClientWebSocket(ClientWebSocketABC):
             logger.error(f"Error: {traceback.format_exc()}")
             logger.error(f"Error: {str(e)}")
             logger.error(f"Error: {e.__traceback__.tb_lineno}")
+        finally:
+            # Trim accumulated WebSocket messages to prevent memory buildup
+            if flow.websocket and len(flow.websocket.messages) > _MAX_WS_MESSAGES:
+                del flow.websocket.messages[:-_MAX_WS_MESSAGES]
 
     def websocket_end(self, flow: mitmproxy.http.HTTPFlow):
         global activated_flows, majsoul_bridges
@@ -66,11 +72,14 @@ class ClientWebSocket(ClientWebSocketABC):
             logger.info(f"WebSocket connection closed: {flow.id}")
             activated_flows.remove(flow.id)
             del majsoul_bridges[flow.id]
+            if not activated_flows:
+                logger.warning("All game WebSocket connections closed")
+                ws_disconnected.set()
         else:
             logger.error(f"WebSocket connection closed from unactivated flow: {flow.id}")
 
 async def start_proxy(host, port):
-    opts = options.Options(listen_host=host, listen_port=port, ssl_insecure=True)
+    opts = options.Options(listen_host=host, listen_port=port, ssl_insecure=True, connection_strategy="lazy")
     master = DumpMaster(
         opts,
         with_termlog=False,

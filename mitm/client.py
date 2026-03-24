@@ -22,6 +22,7 @@ class Client(object):
         self.messages: queue.Queue[dict] = None
         self.running = False
         self._thread = None
+        self.ws_disconnected = threading.Event()
 
     def start(self):
         if self.running:
@@ -33,10 +34,11 @@ class Client(object):
                 self._thread.start()
                 self.messages = mjai_messages
             case MITMType.MAJSOUL:
-                from mitm.majsoul import start_proxy, mjai_messages
+                from mitm.majsoul import start_proxy, mjai_messages, ws_disconnected
                 self._thread = threading.Thread(target=lambda: asyncio.run(start_proxy(settings.mitm.host, settings.mitm.port)))
                 self._thread.start()
                 self.messages = mjai_messages
+                self.ws_disconnected = ws_disconnected
             case MITMType.RIICHI_CITY:
                 from mitm.riichi_city import start_proxy, mjai_messages
                 self._thread = threading.Thread(target=lambda: asyncio.run(start_proxy(settings.mitm.host, settings.mitm.port)))
