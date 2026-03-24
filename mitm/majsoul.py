@@ -69,7 +69,11 @@ class ClientWebSocket(ClientWebSocketABC):
     def websocket_end(self, flow: mitmproxy.http.HTTPFlow):
         global activated_flows, majsoul_bridges
         if flow.id in activated_flows:
-            logger.info(f"WebSocket connection closed: {flow.id}")
+            ws = flow.websocket
+            close_info = ""
+            if ws:
+                close_info = f" close_code={ws.close_code} reason={ws.close_reason!r} by={'client' if ws.closed_by_client else 'server'}"
+            logger.info(f"WebSocket connection closed: {flow.id}{close_info}")
             activated_flows.remove(flow.id)
             del majsoul_bridges[flow.id]
             if not activated_flows:
