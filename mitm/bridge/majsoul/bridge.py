@@ -1,4 +1,5 @@
 import threading
+import time
 from typing import Self
 from enum import Enum
 from functools import cmp_to_key
@@ -10,10 +11,16 @@ from ..logger import logger
 # Used by autoplay to find the correct chi combination index.
 _last_op_lock = threading.Lock()
 _last_op_list = []
+_last_op_context = {}
 
 # Monotonically increasing counter for ActionDiscardTile events,
 # so autoplay can detect if a discard was silently ignored.
 _discard_counter = 0
+_last_discard_event = {"counter": 0}
+
+# Monotonically increasing counter for round-ending events. A discard may be
+# accepted and immediately end the round before a separate discard ACK is seen.
+_round_end_counter = 0
 
 
 def get_last_operation_list():
@@ -22,10 +29,64 @@ def get_last_operation_list():
         return list(_last_op_list)
 
 
+def get_last_operation_context():
+    """Return metadata for the latest operation list."""
+    with _last_op_lock:
+        return dict(_last_op_context)
+
+
 def get_discard_counter():
     """Return monotonic counter incremented on each ActionDiscardTile."""
     with _last_op_lock:
         return _discard_counter
+
+
+def get_last_discard_event():
+    """Return the last ActionDiscardTile details."""
+    with _last_op_lock:
+        return dict(_last_discard_event)
+
+
+def get_round_end_counter():
+    """Return monotonic counter incremented on each round/game end."""
+    with _last_op_lock:
+        return _round_end_counter
+
+
+def _mark_round_end():
+    global _round_end_counter
+    with _last_op_lock:
+        _round_end_counter += 1
+
+
+def _set_last_operation_list(operation_list, context=None):
+    global _last_op_list, _last_op_context
+    op_context = dict(context or {})
+    op_context.setdefault('received_monotonic', time.monotonic())
+    with _last_op_lock:
+        _last_op_list = list(operation_list or [])
+        _last_op_context = op_context
+
+
+def _clear_last_operation_list():
+    global _last_op_list, _last_op_context
+    with _last_op_lock:
+        _last_op_list = []
+        _last_op_context = {}
+
+
+def _mark_discard_event(actor, tile, pai, moqie):
+    global _discard_counter, _last_discard_event
+    with _last_op_lock:
+        _discard_counter += 1
+        _last_discard_event = {
+            "counter": _discard_counter,
+            "actor": actor,
+            "tile": tile,
+            "pai": pai,
+            "moqie": moqie,
+            "received_monotonic": time.monotonic(),
+        }
         
 MS_TILE_2_MJAI_TILE = {
     '0m': '5mr',
@@ -146,6 +207,7 @@ class MajsoulBridge(BridgeBase):
         self.my_tehais = ["?"]*13
         self.my_tsumohai = "?"
         self.syncing = False
+        self.sync_passed_waiting_time = 0
 
         self.mode_id = -1
         self.rank = -1
@@ -155,6 +217,7 @@ class MajsoulBridge(BridgeBase):
 
     def reset(self):
         super().__init__()
+        _clear_last_operation_list()
 
         self.accountId = 0
         self.seat = 0
@@ -168,6 +231,7 @@ class MajsoulBridge(BridgeBase):
         self.my_tehais = ["?"]*13
         self.my_tsumohai = "?"
         self.syncing = False
+        self.sync_passed_waiting_time = 0
 
         self.mode_id = -1
         self.rank = -1
@@ -200,6 +264,10 @@ class MajsoulBridge(BridgeBase):
         if ((liqi_message['method'] == '.lq.FastTest.syncGame' or liqi_message['method'] == '.lq.FastTest.enterGame')
             and liqi_message['type'] == MsgType.Res):
             self.syncing = True
+            try:
+                self.sync_passed_waiting_time = liqi_message['data']['gameRestore'].get('passedWaitingTime', 0)
+            except:
+                self.sync_passed_waiting_time = 0
             syncGame_msgs = LiqiProto().parse_syncGame(liqi_message)
             parsed_list = []
             parsed = []
@@ -208,6 +276,7 @@ class MajsoulBridge(BridgeBase):
                 if parsed:
                     parsed_list.extend(parsed)
             self.syncing = False
+            self.sync_passed_waiting_time = 0
             if len(parsed_list)>=1:
                 return parsed_list
             else:
@@ -225,6 +294,9 @@ class MajsoulBridge(BridgeBase):
             self.accountId = liqi_message['data']['accountId']
             return ret
         if liqi_message['method'] == '.lq.FastTest.authGame' and liqi_message['type'] == MsgType.Res:
+            err = liqi_message['data'].get('error') or {}
+            if err.get('code'):
+                return ret
             self.is_3p = len(liqi_message['data']['seatList']) == 3
             try:
                 self.mode_id = liqi_message['data']['gameConfig']['meta']['modeId']
@@ -232,6 +304,9 @@ class MajsoulBridge(BridgeBase):
                 self.mode_id = -1
 
             seatList = liqi_message['data']['seatList']
+            if self.accountId not in seatList:
+                logger.warning(f'authGame seatList does not contain accountId={self.accountId}')
+                return ret
             self.seat = seatList.index(self.accountId)
             ret.append({
                 'type': 'start_game',
@@ -252,7 +327,7 @@ class MajsoulBridge(BridgeBase):
                 scores = liqi_message['data']['data']['scores']
                 if self.is_3p:
                     scores = scores + [0]
-                tehais = [['?']*13]*4
+                tehais = [['?'] * 13 for _ in range(4)]
                 my_tehais = ['?']*13
                 for hai in range(13):
                     my_tehais[hai] = MS_TILE_2_MJAI_TILE[liqi_message['data']['data']['tiles'][hai]]
@@ -273,9 +348,7 @@ class MajsoulBridge(BridgeBase):
                     )
                 elif len(liqi_message['data']['data']['tiles']) == 14:
                     self.my_tsumohai = MS_TILE_2_MJAI_TILE[liqi_message['data']['data']['tiles'][13]]
-                    all_tehais = my_tehais + [self.my_tsumohai]
-                    all_tehais = sorted(all_tehais, key=cmp_to_key(compare_pai))
-                    tehais[self.seat] = all_tehais[:13]
+                    tehais[self.seat] = sorted(my_tehais, key=cmp_to_key(compare_pai))
                     ret.append(
                         {
                             'type': 'start_kyoku',
@@ -293,7 +366,7 @@ class MajsoulBridge(BridgeBase):
                         {
                             'type': 'tsumo',
                             'actor': self.seat,
-                            'pai': all_tehais[13]
+                            'pai': self.my_tsumohai
                         }
                     )
                 else:
@@ -332,13 +405,12 @@ class MajsoulBridge(BridgeBase):
                 )
             # dahai
             if liqi_message['data']['name'] == 'ActionDiscardTile':
-                global _discard_counter
-                with _last_op_lock:
-                    _discard_counter += 1
                 actor = liqi_message['data']['data']['seat']
                 self.lastDiscard = actor
-                pai = MS_TILE_2_MJAI_TILE[liqi_message['data']['data']['tile']]
+                tile = liqi_message['data']['data']['tile']
+                pai = MS_TILE_2_MJAI_TILE[tile]
                 tsumogiri = liqi_message['data']['data']['moqie']
+                _mark_discard_event(actor, tile, pai, tsumogiri)
                 if liqi_message['data']['data']['isLiqi']:
                     ret.append(
                         {
@@ -477,6 +549,8 @@ class MajsoulBridge(BridgeBase):
                         'type': 'end_kyoku'
                     }
                 )
+                _mark_round_end()
+                _clear_last_operation_list()
                 return ret
             # notile
             if liqi_message['data']['name'] == 'ActionNoTile':
@@ -486,6 +560,8 @@ class MajsoulBridge(BridgeBase):
                         'type': 'end_kyoku'
                     }
                 )
+                _mark_round_end()
+                _clear_last_operation_list()
                 return ret
             # ryukyoku
             if liqi_message['data']['name'] == 'ActionLiuJu':
@@ -500,14 +576,26 @@ class MajsoulBridge(BridgeBase):
                         'type': 'end_kyoku'
                     }
                 )
+                _mark_round_end()
+                _clear_last_operation_list()
                 return ret
             if 'data' in liqi_message['data']:
                 if 'operation' in liqi_message['data']['data']:
-                    global _last_op_list
                     op_data = liqi_message['data']['data']['operation']
-                    with _last_op_lock:
-                        _last_op_list = op_data.get('operationList', [])
-                    return ret
+                    _set_last_operation_list(
+                        op_data.get('operationList', []),
+                        {
+                            'source': liqi_message['data'].get('name'),
+                            'seat': op_data.get('seat'),
+                            'timeAdd': op_data.get('timeAdd'),
+                            'timeFixed': op_data.get('timeFixed'),
+                            'syncing': self.syncing,
+                            'passedWaitingTime': self.sync_passed_waiting_time if self.syncing else 0,
+                        },
+                    )
+                else:
+                    _clear_last_operation_list()
+                return ret
         # end_game
         if liqi_message['method'] == '.lq.NotifyGameEndResult' or liqi_message['method'] == '.lq.NotifyGameTerminate':
             try:
@@ -522,6 +610,7 @@ class MajsoulBridge(BridgeBase):
                     'type': 'end_game'
                 }
             )
+            _mark_round_end()
             return ret
         return ret
         

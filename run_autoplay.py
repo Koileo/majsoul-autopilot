@@ -9,6 +9,9 @@ import signal
 import asyncio
 import threading
 import traceback
+import subprocess
+from dataclasses import dataclass
+from typing import Literal
 from loguru import logger as main_logger
 from akagi.logger import logger
 
@@ -38,11 +41,138 @@ from mitm.client import Client
 from mjai_bot.bot import AkagiBot
 from mjai_bot.controller import Controller
 from settings.settings import settings
-from autoplay.majsoul_automation import MajsoulAutomation
+from autoplay.protocol_automation import MajsoulAutomation
 
-MAX_GAMES_BEFORE_RESTART = 1  # Soft-restart browser/MITM after this many games
+MAX_GAMES_BEFORE_RESTART = 3  # Soft-restart protocol session after this many games
+BUSY_SESSION_RETRY_SECONDS = 60
+MAJSOUL_TAB_CLEANUP_SCRIPT = r'''
+tell application "System Events"
+    set chromeRunning to exists process "Google Chrome"
+    set chromiumRunning to exists process "Chromium"
+end tell
+
+if chromeRunning then
+    tell application "Google Chrome"
+        repeat with w in windows
+            repeat with i from (count of tabs of w) to 1 by -1
+                try
+                    set tabUrl to URL of tab i of w
+                    if tabUrl contains "game.maj-soul.com" then close tab i of w
+                end try
+            end repeat
+        end repeat
+    end tell
+end if
+
+if chromiumRunning then
+    tell application "Chromium"
+        repeat with w in windows
+            repeat with i from (count of tabs of w) to 1 by -1
+                try
+                    set tabUrl to URL of tab i of w
+                    if tabUrl contains "game.maj-soul.com" then close tab i of w
+                end try
+            end repeat
+        end repeat
+    end tell
+end if
+'''
+
+SessionState = Literal["stopped", "busy"]
+
+
+@dataclass(frozen=True)
+class SessionResult:
+    games: int
+    state: SessionState = "stopped"
+    retry_at: int | None = None
+
+
+def _session_restart_delay(result: SessionResult) -> int:
+    if result.state == "busy":
+        if result.retry_at:
+            return max(1, int(result.retry_at - time.time()) + 5)
+        return BUSY_SESSION_RETRY_SECONDS
+    return 10
+
+
+def _busy_session_result(automation, session_game_count: int) -> SessionResult:
+    return SessionResult(
+        session_game_count,
+        "busy",
+        retry_at=getattr(automation, "account_cooldown_until", None),
+    )
+
+
+def _login_failure_session_result(automation, session_game_count: int) -> SessionResult:
+    if getattr(automation, "account_busy", False) or getattr(automation, "account_cooldown_until", None):
+        return _busy_session_result(automation, session_game_count)
+    return SessionResult(session_game_count)
+
+
+def _resolve_riichi_discard(
+    mjai_response: dict | None,
+    mjai_controller,
+    player_id: int | None,
+    last_tsumo_tile: str | None,
+) -> dict | None:
+    """Ask Mortal for the discard after it chooses riichi."""
+    if not (
+        mjai_response
+        and mjai_response.get("type") == "reach"
+        and not mjai_response.get("pai")
+    ):
+        return mjai_response
+
+    resolved = dict(mjai_response)
+    reach_event = {"type": "reach", "actor": player_id}
+    dahai_response = mjai_controller.react([reach_event])
+    if dahai_response and dahai_response.get("type") == "dahai":
+        resolved["pai"] = dahai_response["pai"]
+        resolved["tsumogiri"] = dahai_response.get("tsumogiri", False)
+        logger.info(
+            f"Riichi: model chose {dahai_response['pai']} "
+            f"(tsumogiri={resolved['tsumogiri']})"
+        )
+    elif last_tsumo_tile:
+        resolved["pai"] = last_tsumo_tile
+        resolved["tsumogiri"] = True
+        logger.warning(
+            f"Riichi: model didn't return dahai, fallback to tsumo {last_tsumo_tile}"
+        )
+    else:
+        logger.warning("Riichi requested but no tile available")
+
+    return resolved
+
+
+def _run_best_effort(args: list[str], label: str, *, timeout: float = 5) -> None:
+    try:
+        subprocess.run(
+            args,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+            check=False,
+        )
+    except Exception as exc:
+        logger.warning(f"{label} skipped/failed: {exc!r}")
+
+
+def _cleanup_existing_majsoul_clients() -> None:
+    """Close browser clients that can race the protocol-only controller."""
+    logger.info("Closing existing Majsoul browser clients before protocol takeover")
+    _run_best_effort(
+        ["osascript", "-e", MAJSOUL_TAB_CLEANUP_SCRIPT],
+        "Majsoul browser tab cleanup",
+    )
+    _run_best_effort(
+        ["pkill", "-f", "ms-playwright.*Chromium"],
+        "stale Playwright Chromium cleanup",
+    )
 
 running = True
+_interrupt_count = 0
 # Shared state between game_loop thread and async main
 pending_action = None
 pending_action_lock = threading.Lock()
@@ -52,9 +182,41 @@ game_started_event = threading.Event()
 
 
 def signal_handler(sig, frame):
-    global running
-    logger.info("Shutting down...")
+    global running, _interrupt_count
+    _interrupt_count += 1
     running = False
+    game_started_event.set()
+    game_ended_event.set()
+    if _interrupt_count >= 2:
+        raise KeyboardInterrupt
+
+
+async def _sleep_while_running(seconds: float, *, tick: float = 1.0) -> bool:
+    deadline = time.monotonic() + seconds
+    while running:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return True
+        await asyncio.sleep(min(tick, remaining))
+    return False
+
+
+async def _cancel_match_safely(automation):
+    try:
+        await asyncio.wait_for(automation.cancel_match(), timeout=5)
+    except Exception as exc:
+        logger.warning(f"Cancel match skipped/failed during shutdown: {exc!r}")
+
+
+async def _wait_busy_account_until_lobby(automation) -> Literal["lobby", "busy"]:
+    logger.warning(
+        "Account is busy; polling server state and will not start a new match "
+        "until the active game clears"
+    )
+    return await automation.wait_until_account_free(
+        poll_interval=BUSY_SESSION_RETRY_SECONDS,
+        should_continue=lambda: running,
+    )
 
 
 def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop):
@@ -90,22 +252,13 @@ def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop
                 # Handle riichi: Mortal returns "reach" without specifying
                 # which tile to discard. Feed the reach event back to the
                 # model — it will respond with a dahai indicating the tile.
-                if (game_active and mjai_response
-                        and mjai_response.get("type") == "reach"
-                        and not mjai_response.get("pai")):
-                    reach_event = {"type": "reach", "actor": player_id}
-                    dahai_response = mjai_controller.react([reach_event])
-                    if dahai_response and dahai_response.get("type") == "dahai":
-                        mjai_response["pai"] = dahai_response["pai"]
-                        mjai_response["tsumogiri"] = dahai_response.get("tsumogiri", False)
-                        logger.info(f"Riichi: model chose {dahai_response['pai']} "
-                                    f"(tsumogiri={mjai_response['tsumogiri']})")
-                    elif last_tsumo_tile:
-                        mjai_response["pai"] = last_tsumo_tile
-                        mjai_response["tsumogiri"] = True
-                        logger.warning(f"Riichi: model didn't return dahai, fallback to tsumo {last_tsumo_tile}")
-                    else:
-                        logger.warning("Riichi requested but no tile available")
+                if game_active:
+                    mjai_response = _resolve_riichi_discard(
+                        mjai_response,
+                        mjai_controller,
+                        player_id,
+                        last_tsumo_tile,
+                    )
 
                 # Debug: log every bot response
                 logger.debug(f"Bot response: {mjai_response}")
@@ -138,12 +291,14 @@ def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop
 
 
 async def run_session(total_games, mitm_client):
-    """Run one session: start browser/bot, play N games, then tear down.
+    """Run one protocol session: login, play N games, then tear down.
 
-    MITM proxy is kept alive across sessions; only the browser restarts.
-    Returns the number of games played in this session.
+    MITM proxy and WebUI stay alive across sessions; only Liqi sockets restart.
+    Returns the number of games played plus the terminal session state.
     """
     global running, pending_action, game_active
+
+    _cleanup_existing_majsoul_clients()
 
     # Reset shared state
     pending_action = None
@@ -164,8 +319,31 @@ async def run_session(total_games, mitm_client):
     )
     game_thread.start()
 
-    automation = MajsoulAutomation()
+    automation = MajsoulAutomation(
+        mitm_client.messages,
+        should_continue=lambda: running,
+    )
     session_game_count = 0
+
+    async def recover_state(reason: str):
+        global game_active
+        logger.info(f"Recovering to protocol state ({reason})")
+        result = await automation.recover()
+        if result == "game":
+            logger.info("Recovered into existing game")
+            game_active = True
+            game_started_event.set()
+            game_ended_event.clear()
+        elif result == "lobby":
+            logger.info("Recovered to lobby")
+            game_active = False
+        elif result == "busy":
+            logger.warning("Account is still busy; refusing to queue a new match")
+            game_active = False
+        else:
+            logger.warning("Recovery did not reach a usable protocol state")
+            game_active = False
+        return result
 
     try:
         await automation.start_browser(proxy_port=settings.mitm.port)
@@ -173,19 +351,24 @@ async def run_session(total_games, mitm_client):
 
         if not await automation.wait_for_entrance():
             logger.error("Game failed to initialize")
-            return session_game_count
+            return SessionResult(session_game_count)
 
         if not await automation.login(
             settings.autoplay_account.username,
             settings.autoplay_account.password,
         ):
             logger.error("Login failed")
-            return session_game_count
+            return _login_failure_session_result(automation, session_game_count)
 
         lobby_result = await automation.wait_for_lobby()
         if lobby_result is None:
             logger.error("Failed to enter lobby or game")
-            return session_game_count
+            return SessionResult(session_game_count)
+        if lobby_result == "busy":
+            lobby_result = await _wait_busy_account_until_lobby(automation)
+            if lobby_result == "busy":
+                logger.warning("Account is still busy; not queueing a new match")
+                return _busy_session_result(automation, session_game_count)
 
         if lobby_result == "game":
             logger.info("Auto-reconnected to game, will play it out first")
@@ -197,16 +380,32 @@ async def run_session(total_games, mitm_client):
         consecutive_errors = 0
         while running:
             try:
-                session_game_count += 1
-                current_total = total_games + session_game_count
-                logger.info(f"=== Starting game #{current_total} (session #{session_game_count}) ===")
+                current_total = total_games + session_game_count + 1
+                current_session = session_game_count + 1
+                logger.info(f"=== Starting game #{current_total} (session #{current_session}) ===")
 
                 # Check if already in a game (auto-reconnected after login)
                 if game_active:
                     logger.info("Already in game (auto-reconnected), skipping match queue")
                 else:
+                    if automation.account_busy:
+                        recovered_state = await recover_state("account busy before queue")
+                        if recovered_state == "game":
+                            continue
+                        if recovered_state == "busy":
+                            return _busy_session_result(automation, session_game_count)
+                        if recovered_state != "lobby":
+                            break
+
                     # Start match queue via RPC
-                    if not await automation.start_match():
+                    start_result = await automation.start_match()
+                    if start_result == "busy":
+                        lobby_state = await _wait_busy_account_until_lobby(automation)
+                        if lobby_state == "lobby":
+                            continue
+                        logger.warning("Account is already in a match/game state; leaving queue control alone")
+                        return _busy_session_result(automation, session_game_count)
+                    if start_result != "queued":
                         consecutive_errors += 1
                         logger.error(f"Failed to start match queue (attempt {consecutive_errors}/5)")
                         if consecutive_errors >= 5:
@@ -214,9 +413,15 @@ async def run_session(total_games, mitm_client):
                             break
                         # Recover instead of blind retry — likely not in lobby
                         logger.info("Recovering to get back to lobby...")
-                        if await automation.recover():
+                        recovered_state = await recover_state("start match failed")
+                        if recovered_state == "game":
                             continue
-                        await asyncio.sleep(30)
+                        if recovered_state == "lobby":
+                            continue
+                        if recovered_state == "busy":
+                            return _busy_session_result(automation, session_game_count)
+                        if not await _sleep_while_running(30):
+                            break
                         continue
 
                     consecutive_errors = 0
@@ -225,12 +430,35 @@ async def run_session(total_games, mitm_client):
                     logger.info("Waiting for match...")
                     game_started_event.clear()
                     game_ended_event.clear()
+                    wait_started_at = time.time()
 
                     while running and not game_started_event.is_set():
+                        if automation.game_connect_failed.is_set():
+                            logger.error("Game connection failed after match; recovering")
+                            break
+                        if time.time() - wait_started_at > 420:
+                            logger.error("Match/game start wait timed out; recovering")
+                            break
                         await asyncio.sleep(0.5)
 
                     if not running:
-                        await automation.cancel_match()
+                        await _cancel_match_safely(automation)
+                        break
+                    if automation.game_connect_failed.is_set():
+                        game_active = False
+                        if automation.account_busy:
+                            logger.warning(
+                                "Game connection failed after match and account is busy; "
+                                "not attempting a fresh queue"
+                            )
+                            return _busy_session_result(automation, session_game_count)
+                        recovered_state = await recover_state("game connect failed")
+                        if recovered_state == "game":
+                            continue
+                        if recovered_state == "lobby":
+                            continue
+                        if recovered_state == "busy":
+                            return _busy_session_result(automation, session_game_count)
                         break
 
                 logger.info("Match found! Playing...")
@@ -249,7 +477,25 @@ async def run_session(total_games, mitm_client):
                         last_action_time = time.time()
                         try:
                             seat = mjai_bot.player_id if hasattr(mjai_bot, 'player_id') else 0
-                            await automation.execute_action(action, seat)
+                            action_ok = await automation.execute_action(action, seat)
+                            if action_ok is False:
+                                logger.warning("Action execution returned failure — recovering immediately")
+                                game_active = False
+                                game_ended_event.set()
+                                recovered_state = await recover_state("action execution failed")
+                                if recovered_state == "game":
+                                    logger.info("Reconnected to game after action failure")
+                                    last_action_time = time.time()
+                                    continue
+                                if recovered_state == "lobby":
+                                    logger.warning(
+                                        "Recovered to lobby after action failure; "
+                                        "restarting session without counting this game"
+                                    )
+                                    return SessionResult(session_game_count)
+                                if recovered_state == "busy":
+                                    return _busy_session_result(automation, session_game_count)
+                                break
                         except Exception as e:
                             logger.error(f"Action execution error: {traceback.format_exc()}")
 
@@ -261,14 +507,19 @@ async def run_session(total_games, mitm_client):
                         mitm_client.ws_disconnected.clear()
                         game_active = False
                         game_ended_event.set()
-                        if await automation.recover():
-                            lobby_result = await automation.wait_for_lobby()
-                            if lobby_result == "game":
-                                logger.info("Reconnected to game after WS recovery")
-                                game_active = True
-                                game_started_event.set()
-                                last_action_time = time.time()
-                                continue
+                        recovered_state = await recover_state("websocket disconnected mid-game")
+                        if recovered_state == "game":
+                            logger.info("Reconnected to game after WS recovery")
+                            last_action_time = time.time()
+                            continue
+                        if recovered_state == "lobby":
+                            logger.warning(
+                                "Recovered to lobby after websocket disconnect; "
+                                "restarting session without counting this game"
+                            )
+                            return SessionResult(session_game_count)
+                        if recovered_state == "busy":
+                            return _busy_session_result(automation, session_game_count)
                         break
 
                     # Watchdog: if no action for 120s during a game, assume stuck
@@ -277,27 +528,40 @@ async def run_session(total_games, mitm_client):
                         game_active = False
                         game_ended_event.set()
                         # Try recovery instead of continuing to match loop
-                        if await automation.recover():
-                            lobby_result = await automation.wait_for_lobby()
-                            if lobby_result == "game":
-                                logger.info("Reconnected to game after recovery")
-                                game_active = True
-                                game_started_event.set()
-                                continue
+                        recovered_state = await recover_state("no actions watchdog")
+                        if recovered_state == "game":
+                            logger.info("Reconnected to game after recovery")
+                            last_action_time = time.time()
+                            continue
+                        if recovered_state == "lobby":
+                            logger.warning(
+                                "Recovered to lobby after watchdog; "
+                                "restarting session without counting this game"
+                            )
+                            return SessionResult(session_game_count)
+                        if recovered_state == "busy":
+                            return _busy_session_result(automation, session_game_count)
                         break
 
                 if not running:
                     break
 
                 logger.info(f"Game #{current_total} ended")
+                session_game_count += 1
 
                 # Handle end-game screen and return to lobby
                 if not await automation.handle_end_game():
                     logger.warning("Failed to return to lobby, recovering...")
-                    if not await automation.recover():
+                    recovered_state = await recover_state("end game return lobby failed")
+                    if recovered_state == "game":
+                        continue
+                    if recovered_state == "busy":
+                        return _busy_session_result(automation, session_game_count)
+                    if recovered_state != "lobby":
                         logger.error("Recovery failed after end game")
                         break
-                await asyncio.sleep(3)
+                if not await _sleep_while_running(3):
+                    break
 
                 consecutive_errors = 0
                 logger.info("Returning to lobby for next game...")
@@ -315,18 +579,26 @@ async def run_session(total_games, mitm_client):
                     break
                 logger.info("Attempting recovery...")
                 try:
-                    if not await automation.recover():
-                        await asyncio.sleep(30)
+                    recovered_state = await recover_state("game loop exception")
+                    if recovered_state == "busy":
+                        return _busy_session_result(automation, session_game_count)
+                    if recovered_state not in ("game", "lobby"):
+                        if not await _sleep_while_running(30):
+                            break
                 except Exception:
-                    await asyncio.sleep(30)
+                    if not await _sleep_while_running(30):
+                        break
 
     finally:
         session_stop.set()
         game_thread.join(timeout=5)
         jsonl_logger.close()
-        await automation.close()
+        try:
+            await asyncio.wait_for(automation.close(), timeout=8)
+        except Exception as exc:
+            logger.warning(f"Protocol automation close timed out/failed: {exc!r}")
 
-    return session_game_count
+    return SessionResult(session_game_count)
 
 
 async def main():
@@ -368,14 +640,22 @@ async def main():
     try:
         while running:
             logger.info(f"--- Starting new session (total games so far: {total_games}) ---")
-            session_games = await run_session(total_games, mitm_client)
-            total_games += session_games
+            session_result = await run_session(total_games, mitm_client)
+            total_games += session_result.games
 
             if not running:
                 break
 
-            logger.info(f"Session done ({session_games} games). Restarting in 10s...")
-            await asyncio.sleep(10)
+            delay = _session_restart_delay(session_result)
+            if session_result.state == "busy":
+                logger.warning(
+                    "Session ended with account busy; will recheck protocol state "
+                    f"in {delay}s without starting a new match"
+                )
+            else:
+                logger.info(f"Session done ({session_result.games} games). Restarting in {delay}s...")
+            if not await _sleep_while_running(delay):
+                break
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
     finally:

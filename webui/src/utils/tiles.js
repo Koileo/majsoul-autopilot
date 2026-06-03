@@ -37,9 +37,6 @@ export function tileToText(tileStr) {
 
 /** Sort tiles by suit (万→筒→索→字) then by number */
 export function tileSort(a, b) {
-  const suitOrder = { m: 0, p: 1, s: 2 };
-  const honorOrder = { E: 0, S: 1, W: 2, N: 3, P: 4, F: 5, C: 6 };
-
   const aInfo = parseTileForSort(a);
   const bInfo = parseTileForSort(b);
 

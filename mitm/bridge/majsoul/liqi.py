@@ -40,8 +40,9 @@ class LiqiProto:
         self.msg_id = 1
         self.tot = 0 
         self.res_type = dict()
-        self.jsonProto = json.load(
-            open(os.path.join(os.path.dirname(__file__), 'liqi_proto/liqi.json'), 'r'))
+        proto_path = os.path.join(os.path.dirname(__file__), 'liqi_proto/liqi.json')
+        with open(proto_path, 'r', encoding='utf-8') as proto_file:
+            self.jsonProto = json.load(proto_file)
 
     def init(self):
         self.msg_id = 1
