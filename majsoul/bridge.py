@@ -189,7 +189,7 @@ class OperationAnGangAddGang:
 
 class MajsoulBridge:
     def __init__(self):
-        self.liqi_proto = LiqiProto()
+        self.proto = LiqiProto()
 
         self.accountId = 0
         self.seat = 0
@@ -239,7 +239,7 @@ class MajsoulBridge:
         Returns:
             None | list[dict]: MJAI command.
         """
-        liqi_message = self.liqi_proto.parse(content)
+        liqi_message = self.proto.parse(content)
         logger.debug(f"{liqi_message}")
         ret = self.parse_liqi(liqi_message)
         logger.debug(f"-> {ret}")
@@ -421,10 +421,6 @@ class MajsoulBridge:
                                             'type': 'reach_accepted',
                                             'actor': actor
                                         }
-            # Reach
-            if liqi_message['data']['name'] == 'ActionReach':
-                # TODO
-                pass
             # ChiPonKan
             if liqi_message['data']['name'] == 'ActionChiPengGang':
                 actor = liqi_message['data']['data']['seat']
@@ -452,7 +448,6 @@ class MajsoulBridge:
                                 'consumed': consumed
                             }
                         )
-                        pass
                     case OperationChiPengGang.Peng:
                         assert len(consumed) == 2
                         ret.append(
@@ -475,7 +470,6 @@ class MajsoulBridge:
                                 'consumed': consumed
                             }
                         )
-                        pass
                     case _:
                         raise
             # AnkanKakan
@@ -595,9 +589,6 @@ class MajsoulBridge:
         return ret
         
     
-    def build(self, command: dict) -> None | bytes:
-        pass
-
 def compare_pai(pai1: str, pai2: str):
     # Smallest
     # 1m~4m, 5mr, 5m~9m,

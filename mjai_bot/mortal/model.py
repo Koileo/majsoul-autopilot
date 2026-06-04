@@ -7,12 +7,7 @@ import traceback
 import numpy as np
 
 from torch import nn, Tensor
-from torch.nn import functional as F
-from torch.nn.utils.rnn import pack_padded_sequence, pad_sequence
-from torch.distributions import Normal, Categorical
-from typing import *
 from functools import partial
-from itertools import permutations
 
 
 def _ensure_libriichi_extension() -> None:
@@ -42,7 +37,7 @@ def _ensure_libriichi_extension() -> None:
 _ensure_libriichi_extension()
 
 from .libriichi.mjai import Bot
-from .libriichi.consts import obs_shape, oracle_obs_shape, ACTION_SPACE, GRP_SIZE
+from .libriichi.consts import obs_shape, ACTION_SPACE
 from .logger import logger
 
 class ChannelAttention(nn.Module):
@@ -144,14 +139,11 @@ class ResNet(nn.Module):
         return self.net(x)
 
 class Brain(nn.Module):
-    def __init__(self, *, conv_channels, num_blocks, is_oracle=False, version=1):
+    def __init__(self, *, conv_channels, num_blocks, version=1):
         super().__init__()
-        self.is_oracle = is_oracle
         self.version = version
 
         in_channels = obs_shape(version)[0]
-        if is_oracle:
-            in_channels += oracle_obs_shape(version)[0]
 
         norm_builder = partial(nn.BatchNorm1d, conv_channels, momentum=0.01)
         actv_builder = partial(nn.Mish, inplace=True)
@@ -187,10 +179,7 @@ class Brain(nn.Module):
         # always use EMA or CMA when True
         self._freeze_bn = False
 
-    def forward(self, obs: Tensor, invisible_obs: Optional[Tensor] = None) -> Union[Tuple[Tensor, Tensor], Tensor]:
-        if self.is_oracle:
-            assert invisible_obs is not None
-            obs = torch.cat((obs, invisible_obs), dim=1)
+    def forward(self, obs: Tensor):
         phi = self.encoder(obs)
 
         match self.version:
@@ -222,15 +211,6 @@ class Brain(nn.Module):
     def freeze_bn(self, value: bool):
         self._freeze_bn = value
         return self.train(self.training)
-
-class AuxNet(nn.Module):
-    def __init__(self, dims=None):
-        super().__init__()
-        self.dims = dims
-        self.net = nn.Linear(1024, sum(dims), bias=False)
-
-    def forward(self, x):
-        return self.net(x).split(self.dims, dim=-1)
 
 class DQN(nn.Module):
     def __init__(self, *, version=1):
@@ -274,42 +254,24 @@ class MortalEngine:
         self,
         brain,
         dqn,
-        is_oracle,
         version,
         device = None,
-        stochastic_latent = False,
-        enable_amp = False,
-        enable_quick_eval = True,
-        enable_rule_based_agari_guard = False,
         name = 'NoName',
-        boltzmann_epsilon = 0,
-        boltzmann_temp = 1,
-        top_p = 1,
     ):
         self.engine_type = 'mortal'
         self.device = device or torch.device('cpu')
         assert isinstance(self.device, torch.device)
         self.brain = brain.to(self.device).eval()
         self.dqn = dqn.to(self.device).eval()
-        self.is_oracle = is_oracle
+        self.is_oracle = False
         self.version = version
-        self.stochastic_latent = stochastic_latent
-
-        self.enable_amp = enable_amp
-        self.enable_quick_eval = enable_quick_eval
-        self.enable_rule_based_agari_guard = enable_rule_based_agari_guard
+        self.enable_quick_eval = False
+        self.enable_rule_based_agari_guard = True
         self.name = name
-
-        self.boltzmann_epsilon = boltzmann_epsilon
-        self.boltzmann_temp = boltzmann_temp
-        self.top_p = top_p
 
     def react_batch(self, obs, masks, invisible_obs):
         try:
-            with (
-                torch.autocast(self.device.type, enabled=self.enable_amp),
-                torch.inference_mode(),
-            ):
+            with torch.inference_mode():
                 return self._react_batch(obs, masks, invisible_obs)
         except Exception as ex:
             raise Exception(f'{ex}\n{traceback.format_exc()}')
@@ -317,46 +279,20 @@ class MortalEngine:
     def _react_batch(self, obs, masks, invisible_obs):
         obs = torch.as_tensor(np.stack(obs, axis=0), device=self.device)
         masks = torch.as_tensor(np.stack(masks, axis=0), device=self.device)
-        invisible_obs = None
-        if self.is_oracle:
-            invisible_obs = torch.as_tensor(np.stack(invisible_obs, axis=0), device=self.device)
         batch_size = obs.shape[0]
 
         match self.version:
             case 1:
-                mu, logsig = self.brain(obs, invisible_obs)
-                if self.stochastic_latent:
-                    latent = Normal(mu, logsig.exp() + 1e-6).sample()
-                else:
-                    latent = mu
-                q_out = self.dqn(latent, masks)
+                mu, _logsig = self.brain(obs)
+                q_out = self.dqn(mu, masks)
             case 2 | 3 | 4:
                 phi = self.brain(obs)
                 q_out = self.dqn(phi, masks)
 
-        if self.boltzmann_epsilon > 0:
-            is_greedy = torch.full((batch_size,), 1-self.boltzmann_epsilon, device=self.device).bernoulli().to(torch.bool)
-            logits = (q_out / self.boltzmann_temp).masked_fill(~masks, -torch.inf)
-            sampled = sample_top_p(logits, self.top_p)
-            actions = torch.where(is_greedy, q_out.argmax(-1), sampled)
-        else:
-            is_greedy = torch.ones(batch_size, dtype=torch.bool, device=self.device)
-            actions = q_out.argmax(-1)
+        is_greedy = torch.ones(batch_size, dtype=torch.bool, device=self.device)
+        actions = q_out.argmax(-1)
 
         return actions.tolist(), q_out.tolist(), masks.tolist(), is_greedy.tolist()
-
-def sample_top_p(logits, p):
-    if p >= 1:
-        return Categorical(logits=logits).sample()
-    if p <= 0:
-        return logits.argmax(-1)
-    probs = logits.softmax(-1)
-    probs_sort, probs_idx = probs.sort(-1, descending=True)
-    probs_sum = probs_sort.cumsum(-1)
-    mask = probs_sum - probs_sort > p
-    probs_sort[mask] = 0.
-    sampled = probs_idx.gather(-1, probs_sort.multinomial(1)).squeeze(-1)
-    return sampled
 
 def load_model(seat: int) -> Bot:
     # check if GPU is available
@@ -383,12 +319,8 @@ def load_model(seat: int) -> Bot:
     engine = MortalEngine(
         mortal,
         dqn,
-        is_oracle = False,
         version = state['config']['control']['version'],
         device = device,
-        enable_amp = False,
-        enable_quick_eval = False,
-        enable_rule_based_agari_guard = True,
         name = 'mortal',
     )
 

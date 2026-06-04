@@ -17,7 +17,7 @@ from run_autoplay import _resolve_riichi_discard
 from settings.settings import get_schema, verify_settings
 
 
-class FakeLobby:
+class StubLobby:
     def __init__(self, responses=None):
         self.calls = []
         self.responses = responses or {}
@@ -33,7 +33,7 @@ class FakeLobby:
         return {"data": {}}
 
 
-class FakeRouteSocket:
+class StubRouteSocket:
     instances = []
 
     def __init__(self, name, url, **_kwargs):
@@ -41,7 +41,7 @@ class FakeRouteSocket:
         self.url = url
         self.ws = True
         self.calls = []
-        FakeRouteSocket.instances.append(self)
+        StubRouteSocket.instances.append(self)
 
     async def connect(self, open_timeout=15):
         self.calls.append(("connect", open_timeout))
@@ -88,7 +88,7 @@ class MiniProtocolTests(unittest.IsolatedAsyncioTestCase):
                         "username": "user@example.com",
                         "password": "secret",
                     },
-                    "unexpected": {"mode": "legacy"},
+                    "unexpected": {"mode": "old"},
                 },
                 schema,
             )
@@ -102,7 +102,7 @@ class MiniProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_target_mode_for_rank_level(10301), ("4p_south", "gold"))
 
     def test_riichi_resolution_feeds_reach_before_discard(self):
-        class FakeController:
+        class StubController:
             def __init__(self):
                 self.calls = []
 
@@ -110,7 +110,7 @@ class MiniProtocolTests(unittest.IsolatedAsyncioTestCase):
                 self.calls.append(events)
                 return {"type": "dahai", "pai": "4m", "tsumogiri": False}
 
-        controller = FakeController()
+        controller = StubController()
 
         action = _resolve_riichi_discard(
             {"type": "reach"},
@@ -140,7 +140,7 @@ class MiniProtocolTests(unittest.IsolatedAsyncioTestCase):
 
         automation = PrepareOkAutomation()
         automation.account_id = 23744444
-        automation.lobby = FakeLobby(
+        automation.lobby = StubLobby(
             {
                 ".lq.Lobby.fetchAccountInfo": {
                     "data": {"account": {"level": {"id": 201, "score": 143}}}
@@ -162,15 +162,15 @@ class MiniProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(automation.target_room, "silver")
 
     async def test_prepare_route_uses_official_route_socket_only(self):
-        FakeRouteSocket.instances = []
+        StubRouteSocket.instances = []
         automation = MajsoulAutomation()
         automation.access_token = "access-token"
 
-        with patch("majsoul.client.LiqiSocket", FakeRouteSocket):
+        with patch("majsoul.client.LiqiSocket", StubRouteSocket):
             prepared = await automation._prepare_game_route(target_route_id="route-5")
 
         self.assertTrue(prepared)
-        sock = FakeRouteSocket.instances[0]
+        sock = StubRouteSocket.instances[0]
         self.assertEqual(sock.url, "wss://route-5.maj-soul.com:443/gateway")
         self.assertEqual(sock.calls[1][0], ".lq.Route.requestConnection")
         self.assertEqual(sock.calls[2][0], ".lq.Lobby.prepareLogin")
