@@ -24,7 +24,7 @@ from .bridge import (
     get_round_end_counter,
 )
 from .protocol import LiqiProto, MsgType, toProtobuf
-from settings.settings import settings
+from settings import settings
 from .logger import logger
 
 

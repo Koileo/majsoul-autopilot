@@ -18,7 +18,11 @@ err.log
 *.bin
 
 # Settings with credentials
+settings.json
 settings/settings.json
+
+# Local tests are kept out of the mini branch
+tests/
 
 # Claude Code
 .claude/

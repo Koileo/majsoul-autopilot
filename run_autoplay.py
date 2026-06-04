@@ -39,7 +39,7 @@ main_logger.add(_stderr, level="DEBUG",
                 format="{time:HH:mm:ss} | {level: <5} | {message}")
 from mjai_bot.bot import MjaiStateTracker
 from mjai_bot.controller import Controller
-from settings.settings import settings
+from settings import settings
 from majsoul.client import MajsoulAutomation
 
 MAX_GAMES_BEFORE_RESTART = 3  # Soft-restart protocol session after this many games
