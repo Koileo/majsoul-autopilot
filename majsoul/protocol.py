@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Tuple, Dict
 from google.protobuf.json_format import MessageToDict, ParseDict
 from .liqi_proto import liqi_pb2 as pb
-from ..logger import logger
+from .logger import logger
 
 
 class MsgType(Enum):

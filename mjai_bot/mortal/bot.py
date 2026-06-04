@@ -1,5 +1,4 @@
 import json
-import sys
 
 from . import model
 from .logger import logger
@@ -108,4 +107,3 @@ class Bot:
                 raw_data["meta"]["online"] = model.is_online
             # ==================================== #
             return json.dumps(raw_data, separators=(",", ":"))
-

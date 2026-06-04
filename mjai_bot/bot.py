@@ -1,14 +1,11 @@
 import json
-from mjai import Bot
 from dataclasses import dataclass
-from mjai.mlibriichi.state import ActionCandidate, PlayerState  # type: ignore
+from mjai import Bot
+from mjai.mlibriichi.state import PlayerState  # type: ignore
 from .logger import logger
 
-class AkagiBot(Bot):
-    """
-    This bot is used for tracking the game states, overwriting some of the
-    mjai.Bot methods to be compatible with the Akagi application.
-    """
+class MjaiStateTracker(Bot):
+    """Track MJAI game state so the runner can inspect seat/hand details."""
     def __init__(self):
         super().__init__()
 
@@ -90,7 +87,7 @@ class AkagiBot(Bot):
         Examples:
             >>> bot.find_chi_candidates_simple()
         """
-        chi_candidates: AkagiBot.ChiCandidates = AkagiBot.ChiCandidates()
+        chi_candidates: MjaiStateTracker.ChiCandidates = MjaiStateTracker.ChiCandidates()
 
         color = self.last_kawa_tile[1]
         chi_num = int(self.last_kawa_tile[0])

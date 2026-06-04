@@ -1,12 +1,11 @@
 import json
-from .base.bot import Bot
 from .logger import logger
 from .mortal.bot import Bot as MortalBot
 
 
 class Controller(object):
     def __init__(self):
-        self.bot: Bot = MortalBot()
+        self.bot = MortalBot()
         self.temp_mjai_msg: list[dict] = []
         self.starting_game: bool = False
 

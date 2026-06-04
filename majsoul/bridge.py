@@ -1,20 +1,17 @@
 import threading
 import time
-from typing import Self
-from enum import Enum
 from functools import cmp_to_key
-from .liqi import LiqiProto, MsgType
-from ..bridge_base import BridgeBase
-from ..logger import logger
+from .protocol import LiqiProto, MsgType
+from .logger import logger
 
 # Thread-safe storage for the latest operation list from server.
-# Used by autoplay to find the correct chi combination index.
+# Used by the protocol client to find the correct chi combination index.
 _last_op_lock = threading.Lock()
 _last_op_list = []
 _last_op_context = {}
 
 # Monotonically increasing counter for ActionDiscardTile events,
-# so autoplay can detect if a discard was silently ignored.
+# so the protocol client can detect if a discard was silently ignored.
 _discard_counter = 0
 _last_discard_event = {"counter": 0}
 
@@ -190,9 +187,8 @@ class OperationAnGangAddGang:
     AnGang = 3
     AddGang = 2
 
-class MajsoulBridge(BridgeBase):
+class MajsoulBridge:
     def __init__(self):
-        super().__init__()
         self.liqi_proto = LiqiProto()
 
         self.accountId = 0
@@ -213,10 +209,7 @@ class MajsoulBridge(BridgeBase):
         self.rank = -1
         self.score = -1
 
-        self.is_3p = False
-
     def reset(self):
-        super().__init__()
         _clear_last_operation_list()
 
         self.accountId = 0
@@ -236,9 +229,6 @@ class MajsoulBridge(BridgeBase):
         self.mode_id = -1
         self.rank = -1
         self.score = -1
-
-        self.is_3p = False
-
 
     def parse(self, content: bytes) -> None | list[dict]:
         """Parses the content and returns MJAI command.
@@ -297,7 +287,9 @@ class MajsoulBridge(BridgeBase):
             err = liqi_message['data'].get('error') or {}
             if err.get('code'):
                 return ret
-            self.is_3p = len(liqi_message['data']['seatList']) == 3
+            if len(liqi_message['data']['seatList']) != 4:
+                logger.warning("Ignoring non-four-player authGame response")
+                return ret
             try:
                 self.mode_id = liqi_message['data']['gameConfig']['meta']['modeId']
             except:
@@ -325,8 +317,6 @@ class MajsoulBridge(BridgeBase):
                 kyoku = oya + 1
                 kyotaku = liqi_message['data']['data']['liqibang']
                 scores = liqi_message['data']['data']['scores']
-                if self.is_3p:
-                    scores = scores + [0]
                 tehais = [['?'] * 13 for _ in range(4)]
                 my_tehais = ['?']*13
                 for hai in range(13):

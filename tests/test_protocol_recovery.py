@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import run_autoplay as autoplay_runner
-from autoplay.protocol_automation import (
+from majsoul.client import (
     CLIENT_VERSION_STRING,
     MajsoulAutomation,
     PACKAGE_VERSION,
@@ -17,13 +17,12 @@ from autoplay.protocol_automation import (
     _client_version_string,
     _format_error,
     _route_change_body,
-    _route_tcp_attempts,
     _route_ws_url,
     _select_riichi_declaration_tile,
     _target_mode_for_rank_level,
 )
-from mitm.bridge.majsoul.liqi import LiqiProto, fromProtobuf
-from mitm.bridge.majsoul.bridge import (
+from majsoul.protocol import LiqiProto, fromProtobuf
+from majsoul.bridge import (
     MajsoulBridge,
     get_last_discard_event,
     get_last_operation_context,
@@ -175,9 +174,9 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             return None
 
         with (
-            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
+            patch("majsoul.client.asyncio.sleep", fast_sleep),
             patch(
-                "autoplay.protocol_automation.get_last_operation_list",
+                "majsoul.client.get_last_operation_list",
                 lambda: [{"type": 7, "combination": ["8s", "0m"]}],
             ),
         ):
@@ -189,20 +188,13 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertEqual(sends[0]["tile"], "0m")
 
-    def test_route_tcp_attempts_use_system_dns_only(self):
-        with patch("autoplay.protocol_automation.urllib.request.urlopen") as urlopen:
-            attempts = _route_tcp_attempts("wss://route-2.maj-soul.com:443/game-gateway-zone")
-
-        urlopen.assert_not_called()
-        self.assertEqual(attempts, [(None, None)])
-
     async def test_execute_action_returns_false_when_input_operation_fails(self):
         automation = MajsoulAutomation()
 
         async def no_sleep(_seconds):
             return None
 
-        with patch("autoplay.protocol_automation.asyncio.sleep", no_sleep):
+        with patch("majsoul.client.asyncio.sleep", no_sleep):
             result = await automation.execute_action(
                 {"type": "dahai", "pai": "1m", "tsumogiri": True},
                 seat=0,
@@ -563,7 +555,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async def fast_sleep(_seconds):
             return None
 
-        with patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep):
+        with patch("majsoul.client.asyncio.sleep", fast_sleep):
             await automation._connect_game({
                 "gameUrl": "172.30.16.117:4025",
                 "connectToken": "token-consumed-elsewhere",
@@ -595,11 +587,11 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             return 10 if round_end_calls["count"] == 1 else 11
 
         with (
-            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
-            patch("autoplay.protocol_automation.get_last_operation_list", lambda: [{"type": 1}]),
-            patch("autoplay.protocol_automation.get_last_operation_context", lambda: {}),
-            patch("autoplay.protocol_automation.get_last_discard_event", lambda: {"counter": 20}),
-            patch("autoplay.protocol_automation.get_round_end_counter", fake_round_end_counter),
+            patch("majsoul.client.asyncio.sleep", fast_sleep),
+            patch("majsoul.client.get_last_operation_list", lambda: [{"type": 1}]),
+            patch("majsoul.client.get_last_operation_context", lambda: {}),
+            patch("majsoul.client.get_last_discard_event", lambda: {"counter": 20}),
+            patch("majsoul.client.get_round_end_counter", fake_round_end_counter),
         ):
             result = await automation._send_discard_with_retry("3z", False, seat=2)
 
@@ -626,18 +618,18 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             return 30 if discard_calls["count"] <= 26 else 31
 
         with (
-            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
-            patch("autoplay.protocol_automation.get_last_operation_list", lambda: [{"type": 1}]),
-            patch("autoplay.protocol_automation.get_last_operation_context", lambda: {}),
+            patch("majsoul.client.asyncio.sleep", fast_sleep),
+            patch("majsoul.client.get_last_operation_list", lambda: [{"type": 1}]),
+            patch("majsoul.client.get_last_operation_context", lambda: {}),
             patch(
-                "autoplay.protocol_automation.get_last_discard_event",
+                "majsoul.client.get_last_discard_event",
                 lambda: (
                     {"counter": 30}
                     if fake_discard_counter() <= 30
                     else {"counter": 31, "actor": 2, "tile": "4z", "pai": "N"}
                 ),
             ),
-            patch("autoplay.protocol_automation.get_round_end_counter", lambda: 40),
+            patch("majsoul.client.get_round_end_counter", lambda: 40),
         ):
             result = await automation._send_discard_with_retry("4z", False, seat=2)
 
@@ -658,11 +650,11 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             return None
 
         with (
-            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
-            patch("autoplay.protocol_automation.get_last_operation_list", lambda: [{"type": 1}]),
-            patch("autoplay.protocol_automation.get_last_operation_context", lambda: {}),
-            patch("autoplay.protocol_automation.get_last_discard_event", lambda: {"counter": 50}),
-            patch("autoplay.protocol_automation.get_round_end_counter", lambda: 60),
+            patch("majsoul.client.asyncio.sleep", fast_sleep),
+            patch("majsoul.client.get_last_operation_list", lambda: [{"type": 1}]),
+            patch("majsoul.client.get_last_operation_context", lambda: {}),
+            patch("majsoul.client.get_last_discard_event", lambda: {"counter": 50}),
+            patch("majsoul.client.get_round_end_counter", lambda: 60),
         ):
             result = await automation._send_discard_with_retry("4z", False, seat=2)
 
@@ -680,12 +672,12 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         automation = StaleDiscardAutomation()
 
         with (
-            patch("autoplay.protocol_automation.get_last_operation_list", lambda: []),
+            patch("majsoul.client.get_last_operation_list", lambda: []),
             patch(
-                "autoplay.protocol_automation.get_last_discard_event",
+                "majsoul.client.get_last_discard_event",
                 lambda: {"counter": 10, "actor": 1, "tile": "6s", "received_monotonic": 100.0},
             ),
-            patch("autoplay.protocol_automation.time.monotonic", lambda: 101.0),
+            patch("majsoul.client.time.monotonic", lambda: 101.0),
         ):
             result = await automation._send_discard_with_retry("8p", False, seat=1)
 
@@ -716,11 +708,11 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             return discard_events.pop(0)
 
         with (
-            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
-            patch("autoplay.protocol_automation.get_last_operation_list", lambda: [{"type": 1}]),
-            patch("autoplay.protocol_automation.get_last_operation_context", lambda: {}),
-            patch("autoplay.protocol_automation.get_last_discard_event", fake_last_discard_event),
-            patch("autoplay.protocol_automation.get_round_end_counter", lambda: 60),
+            patch("majsoul.client.asyncio.sleep", fast_sleep),
+            patch("majsoul.client.get_last_operation_list", lambda: [{"type": 1}]),
+            patch("majsoul.client.get_last_operation_context", lambda: {}),
+            patch("majsoul.client.get_last_discard_event", fake_last_discard_event),
+            patch("majsoul.client.get_round_end_counter", lambda: 60),
         ):
             result = await automation._send_discard_with_retry("4z", False, seat=2)
 
@@ -753,15 +745,15 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             return discard_events.pop(0)
 
         with (
-            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
-            patch("autoplay.protocol_automation.get_last_operation_list", lambda: [{"type": 1}]),
+            patch("majsoul.client.asyncio.sleep", fast_sleep),
+            patch("majsoul.client.get_last_operation_list", lambda: [{"type": 1}]),
             patch(
-                "autoplay.protocol_automation.get_last_operation_context",
+                "majsoul.client.get_last_operation_context",
                 lambda: {"source": "ActionNewRound", "seat": 3, "received_monotonic": 100.0},
             ),
-            patch("autoplay.protocol_automation.get_last_discard_event", fake_last_discard_event),
-            patch("autoplay.protocol_automation.get_round_end_counter", lambda: 90),
-            patch("autoplay.protocol_automation.time.monotonic", lambda: 100.0),
+            patch("majsoul.client.get_last_discard_event", fake_last_discard_event),
+            patch("majsoul.client.get_round_end_counter", lambda: 90),
+            patch("majsoul.client.time.monotonic", lambda: 100.0),
         ):
             result = await automation._send_discard_with_retry("9p", True, seat=3)
 
@@ -795,12 +787,12 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             return contexts.pop(0)
 
         with (
-            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
-            patch("autoplay.protocol_automation.get_last_operation_list", lambda: [{"type": 1}]),
-            patch("autoplay.protocol_automation.get_last_operation_context", fake_last_operation_context),
-            patch("autoplay.protocol_automation.get_last_discard_event", lambda: {"counter": 80}),
-            patch("autoplay.protocol_automation.get_round_end_counter", lambda: 90),
-            patch("autoplay.protocol_automation.time.monotonic", lambda: 100.0),
+            patch("majsoul.client.asyncio.sleep", fast_sleep),
+            patch("majsoul.client.get_last_operation_list", lambda: [{"type": 1}]),
+            patch("majsoul.client.get_last_operation_context", fake_last_operation_context),
+            patch("majsoul.client.get_last_discard_event", lambda: {"counter": 80}),
+            patch("majsoul.client.get_round_end_counter", lambda: 90),
+            patch("majsoul.client.time.monotonic", lambda: 100.0),
         ):
             result = await automation._send_discard_with_retry("3z", False, seat=1)
 
@@ -834,10 +826,10 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             return discard_events.pop(0)
 
         with (
-            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
-            patch("autoplay.protocol_automation.get_last_operation_list", lambda: [{"type": 1}]),
+            patch("majsoul.client.asyncio.sleep", fast_sleep),
+            patch("majsoul.client.get_last_operation_list", lambda: [{"type": 1}]),
             patch(
-                "autoplay.protocol_automation.get_last_operation_context",
+                "majsoul.client.get_last_operation_context",
                 lambda: {
                     "source": "ActionNewRound",
                     "seat": 1,
@@ -846,9 +838,9 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     "syncing": True,
                 },
             ),
-            patch("autoplay.protocol_automation.get_last_discard_event", fake_last_discard_event),
-            patch("autoplay.protocol_automation.get_round_end_counter", lambda: 90),
-            patch("autoplay.protocol_automation.time.monotonic", lambda: 100.0),
+            patch("majsoul.client.get_last_discard_event", fake_last_discard_event),
+            patch("majsoul.client.get_round_end_counter", lambda: 90),
+            patch("majsoul.client.time.monotonic", lambda: 100.0),
         ):
             result = await automation._send_discard_with_retry("2z", False, seat=1)
 
@@ -883,7 +875,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async def fast_sleep(_seconds):
             return None
 
-        with patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep):
+        with patch("majsoul.client.asyncio.sleep", fast_sleep):
             await automation._connect_game({
                 "gameUrl": "172.30.16.117:4025",
                 "connectToken": "single-use-token",
@@ -918,7 +910,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async def fast_sleep(_seconds):
             return None
 
-        with patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep):
+        with patch("majsoul.client.asyncio.sleep", fast_sleep):
             await automation._connect_game({
                 "gameUrl": "172.30.16.117:4025",
                 "connectToken": "connect-token",
@@ -955,7 +947,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async def fast_sleep(_seconds):
             return None
 
-        with patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep):
+        with patch("majsoul.client.asyncio.sleep", fast_sleep):
             await automation._connect_game({
                 "gameUrl": "172.30.16.133:4034",
                 "connectToken": "connect-token",
@@ -992,7 +984,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async def fast_sleep(_seconds):
             return None
 
-        with patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep):
+        with patch("majsoul.client.asyncio.sleep", fast_sleep):
             await automation._connect_game({
                 "gameUrl": "172.30.16.133:4034",
                 "connectToken": "connect-token",
@@ -1042,7 +1034,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async def fast_sleep(_seconds):
             return None
 
-        with patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep):
+        with patch("majsoul.client.asyncio.sleep", fast_sleep):
             await automation._connect_game({
                 "gameUrl": "172.30.16.133:4034",
                 "connectToken": "connect-token",
@@ -1094,7 +1086,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         automation.lobby_route_id = "route-2"
         fake = FakeRoutePrep()
 
-        with patch("autoplay.protocol_automation.LiqiSocket", lambda *args, **kwargs: fake):
+        with patch("majsoul.client.LiqiSocket", lambda *args, **kwargs: fake):
             prepared = await automation._prepare_game_route(target_route_id="route-5", force=True)
 
         self.assertTrue(prepared)
@@ -1133,7 +1125,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
             socket_args.append((args, kwargs))
             return fake
 
-        with patch("autoplay.protocol_automation.LiqiSocket", fake_socket):
+        with patch("majsoul.client.LiqiSocket", fake_socket):
             prepared = await automation._prepare_game_route(target_route_id="route-5", force=True)
 
         self.assertTrue(prepared)
@@ -1156,7 +1148,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         ]
         fake = FakeRoutePrep()
 
-        with patch("autoplay.protocol_automation.LiqiSocket", lambda *args, **kwargs: fake):
+        with patch("majsoul.client.LiqiSocket", lambda *args, **kwargs: fake):
             prepared = await automation._prepare_game_route(force=True)
 
         self.assertTrue(prepared)
@@ -1181,7 +1173,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         })
         fake = FakeRoutePrep()
 
-        with patch("autoplay.protocol_automation.LiqiSocket", lambda *args, **kwargs: fake):
+        with patch("majsoul.client.LiqiSocket", lambda *args, **kwargs: fake):
             prepared = await automation._prepare_game_route(target_route_id="route-5", force=True)
 
         self.assertTrue(prepared)
@@ -1193,7 +1185,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         automation.lobby_route_id = "route-2"
         fake = FakeRoutePrep()
 
-        with patch("autoplay.protocol_automation.LiqiSocket", lambda *args, **kwargs: fake):
+        with patch("majsoul.client.LiqiSocket", lambda *args, **kwargs: fake):
             prepared = await automation._prepare_game_route(
                 target_route_id="route-5",
                 force=True,
@@ -1249,7 +1241,7 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         async def fast_sleep(_seconds):
             return None
 
-        with patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep):
+        with patch("majsoul.client.asyncio.sleep", fast_sleep):
             result = await automation.wait_until_account_free(
                 poll_interval=0.01,
                 should_continue=lambda: True,
@@ -1329,15 +1321,15 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         autoplay_runner.running = self.old_running
 
-    async def test_run_session_initializes_protocol_before_login(self):
+    async def test_run_session_logs_in_before_play_loop(self):
         events = []
 
         class FakeAutomation:
             def __init__(self, *args, **kwargs):
                 events.append("automation-init")
 
-            async def initialize(self):
-                events.append("initialize")
+            async def login(self, username, password):
+                events.append(("login", username, password))
                 return False
 
             async def close(self):
@@ -1358,7 +1350,7 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("run_autoplay.MajsoulAutomation", FakeAutomation),
             patch("run_autoplay.Controller", lambda: object()),
-            patch("run_autoplay.AkagiBot", FakeBot),
+            patch("run_autoplay.MjaiStateTracker", FakeBot),
             patch("run_autoplay.JsonlLogger", FakeJsonlLogger),
             patch("run_autoplay.process_messages", lambda *args, **kwargs: None),
         ):
@@ -1366,7 +1358,7 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, SessionResult(0))
         self.assertEqual(events[0], "automation-init")
-        self.assertIn("initialize", events)
+        self.assertTrue(any(event[0] == "login" for event in events if isinstance(event, tuple)))
 
     async def test_run_session_does_not_count_recovered_action_failure_as_completed_game(self):
         events = []
@@ -1375,9 +1367,6 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
         class FakeAutomation:
             def __init__(self, *args, **kwargs):
                 events.append("automation-init")
-
-            async def initialize(self):
-                return True
 
             async def login(self, username, password):
                 return True
@@ -1424,7 +1413,7 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("run_autoplay.MajsoulAutomation", FakeAutomation),
             patch("run_autoplay.Controller", lambda: object()),
-            patch("run_autoplay.AkagiBot", FakeBot),
+            patch("run_autoplay.MjaiStateTracker", FakeBot),
             patch("run_autoplay.JsonlLogger", FakeJsonlLogger),
             patch("run_autoplay.game_loop", fake_game_loop),
         ):
@@ -1484,7 +1473,7 @@ class MinimalSettingsTests(unittest.TestCase):
     def test_refresh_client_version_ignores_legacy_laya_version_json(self):
         automation = MajsoulAutomation()
 
-        with patch("autoplay.protocol_automation._fetch_current_resource_version", return_value="0.11.252.w"):
+        with patch("majsoul.client._fetch_current_resource_version", return_value="0.11.252.w"):
             asyncio.run(automation._refresh_client_version())
 
         self.assertEqual(automation.resource_version, "0.16.229")

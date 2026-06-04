@@ -26,7 +26,7 @@ from typing import Any, Callable, Literal
 
 import websockets
 
-from mitm.bridge.majsoul.bridge import (
+from .bridge import (
     MajsoulBridge,
     get_discard_counter,
     get_last_discard_event,
@@ -34,7 +34,7 @@ from mitm.bridge.majsoul.bridge import (
     get_last_operation_list,
     get_round_end_counter,
 )
-from mitm.bridge.majsoul.liqi import LiqiProto, MsgType, toProtobuf
+from .protocol import LiqiProto, MsgType, toProtobuf
 from settings.settings import settings
 from .logger import logger
 
@@ -44,7 +44,6 @@ MAJSOUL_LOBBY_ROUTE_CANDIDATES = ("route-2", "route-3", "route-4", "route-5", "r
 MAJSOUL_GAME_ROUTE_ID = MAJSOUL_ROUTE_ID
 MAJSOUL_GAME_ROUTE_CANDIDATES = ("route-6", "route-5", "route-4", "route-3", "route-2")
 MAJSOUL_PREP_ROUTE_CANDIDATES = ("route-6", "route-5", "route-4", "route-3", "route-2")
-MAJSOUL_LOBBY_WS = f"wss://{MAJSOUL_ROUTE_ID}.maj-soul.com:443/gateway"
 MAJSOUL_VERSION_URL = "https://game.maj-soul.com/1/version.json"
 MAJSOUL_CONFIG_URL_TEMPLATE = "https://game.maj-soul.com/1/v{version}/config.json"
 MAJSOUL_CLIENTGATE_ROUTES_PATH = "/api/clientgate/routes"
@@ -358,10 +357,6 @@ def _endpoint_ws_url(endpoint: dict[str, Any]) -> str | None:
     return f"wss://{address}:{port}/gateway"
 
 
-def _route_tcp_attempts(_url: str) -> list[tuple[str | None, int | None]]:
-    return [(None, None)]
-
-
 def _prepare_login_body(access_token: str) -> bytes:
     return toProtobuf(
         [
@@ -500,20 +495,13 @@ class LiqiSocket:
         if self.url.startswith("wss://"):
             base_kwargs["ssl"] = self.ssl_context
 
-        attempts = _route_tcp_attempts(self.url)
-        errors: list[str] = []
-        for tcp_host, tcp_port in attempts:
-            kwargs = dict(base_kwargs)
-            try:
-                self.ws = await websockets.connect(self.url, **kwargs)
-                break
-            except Exception as exc:
-                label = f"{tcp_host}:{tcp_port}" if tcp_host else "system-dns"
-                errors.append(f"{label}: {exc!r}")
-                logger.warning(f"{self.name} websocket connect failed via {label}: {exc!r}")
-                self.ws = None
+        try:
+            self.ws = await websockets.connect(self.url, **base_kwargs)
+        except Exception as exc:
+            logger.warning(f"{self.name} websocket connect failed: {exc!r}")
+            self.ws = None
         if not self.ws:
-            raise ConnectionError(f"{self.name} websocket connect failed: {'; '.join(errors)}")
+            raise ConnectionError(f"{self.name} websocket connect failed")
 
         self.reader_task = asyncio.create_task(self._reader(), name=f"liqi-{self.name}")
         logger.info(f"{self.name} websocket connected")
@@ -680,10 +668,6 @@ class MajsoulAutomation:
             return bool(self.should_continue())
         except Exception:
             return True
-
-    async def initialize(self) -> bool:
-        logger.info("Protocol automation initialized")
-        return True
 
     async def login(self, username: str, password: str, *, reconnect: bool = False):
         logger.info(f"Logging in as {username} via Liqi protocol...")
@@ -996,14 +980,6 @@ class MajsoulAutomation:
         self.matching = False
         logger.info("Match cancelled")
 
-    async def wait_for_game_start(self, timeout: float = 300):
-        try:
-            await asyncio.wait_for(self.game_started.wait(), timeout=timeout)
-            return True
-        except asyncio.TimeoutError:
-            logger.error("Game start timeout")
-            return False
-
     async def execute_action(self, mjai_action: dict, seat: int):
         action_type = mjai_action.get("type")
         if action_type in ("none", None):
@@ -1075,9 +1051,6 @@ class MajsoulAutomation:
             self.game = None
         logger.info("Game ended; protocol client is back in lobby")
         return True
-
-    async def check_connection(self) -> bool:
-        return bool(self.lobby and self.lobby.ws)
 
     async def recover(self):
         logger.info("Recovering by reconnecting protocol session")
@@ -1323,7 +1296,7 @@ class MajsoulAutomation:
         if self.lobby:
             await self.lobby.close()
             self.lobby = None
-        logger.info("Protocol automation closed")
+        logger.info("Liqi client closed")
 
     def _login_payload(self, username: str, password: str, *, reconnect: bool = False) -> dict[str, Any]:
         digest = hmac.new(b"lailai", password.encode(), hashlib.sha256).hexdigest()

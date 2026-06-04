@@ -1,9 +1,12 @@
-"""Full-auto Majsoul player: login → match → play → repeat."""
+"""Full-auto four-player Majsoul autopilot: login -> match -> play -> repeat."""
 
 import os
 os.environ["LOGURU_AUTOINIT"] = "False"
 
 import sys
+import json
+import math
+import pathlib
 import time
 import signal
 import asyncio
@@ -11,9 +14,10 @@ import queue
 import threading
 import traceback
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 from loguru import logger as main_logger
-from akagi.logger import logger
+from majsoul.logger import logger
 
 # Unbuffered stderr wrapper for real-time log output
 class _Unbuffered:
@@ -29,16 +33,14 @@ class _Unbuffered:
 
 _stderr = _Unbuffered(sys.stderr)
 
-# Add stderr handler for autoplay so we see output in console
+# Add stderr handler so we see output in console.
 main_logger.add(_stderr, level="DEBUG",
-                filter=lambda record: record["extra"].get("module") in ("akagi", "autoplay", "mjai_bot"),
+                filter=lambda record: record["extra"].get("module") in ("majsoul", "mjai_bot", "mjai_controller"),
                 format="{time:HH:mm:ss} | {level: <5} | {message}")
-from akagi.core import process_messages
-from akagi.jsonl_logger import JsonlLogger
-from mjai_bot.bot import AkagiBot
+from mjai_bot.bot import MjaiStateTracker
 from mjai_bot.controller import Controller
 from settings.settings import settings
-from autoplay.protocol_automation import MajsoulAutomation
+from majsoul.client import MajsoulAutomation
 
 MAX_GAMES_BEFORE_RESTART = 3  # Soft-restart protocol session after this many games
 BUSY_SESSION_RETRY_SECONDS = 60
@@ -51,6 +53,118 @@ class SessionResult:
     games: int
     state: SessionState = "stopped"
     retry_at: int | None = None
+
+
+def _meta_to_recommend(meta: dict, temperature: float = 0.3) -> list[tuple[str, float]]:
+    labels = [
+        "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m",
+        "1p", "2p", "3p", "4p", "5p", "6p", "7p", "8p", "9p",
+        "1s", "2s", "3s", "4s", "5s", "6s", "7s", "8s", "9s",
+        "E", "S", "W", "N", "P", "F", "C",
+        "5mr", "5pr", "5sr",
+        "reach", "chi_low", "chi_mid", "chi_high", "pon",
+        "kan_select", "hora", "ryukyoku", "none",
+    ]
+    q_values = [float(value) for value in meta.get("q_values", [])]
+    if not q_values:
+        return []
+
+    scaled = [value / temperature for value in q_values]
+    base = max(scaled)
+    weights = [math.exp(value - base) for value in scaled]
+    total = sum(weights) or 1.0
+    probs = [weight / total for weight in weights]
+
+    q_index = 0
+    recommend = []
+    for index, label in enumerate(labels):
+        if int(meta.get("mask_bits", 0)) & (1 << index):
+            if q_index >= len(probs):
+                break
+            recommend.append((label, probs[q_index]))
+            q_index += 1
+    return sorted(recommend, key=lambda item: item[1], reverse=True)
+
+
+class JsonlLogger:
+    """Write compact game-flow and inference JSONL logs."""
+
+    def __init__(self):
+        logs_dir = pathlib.Path("logs")
+        logs_dir.mkdir(exist_ok=True)
+        self._gf = open(logs_dir / "game_flow.jsonl", "w", encoding="utf-8")
+        self._inf = open(logs_dir / "inference.jsonl", "w", encoding="utf-8")
+        self._kyoku = 0
+        self._honba = 0
+        self._junme = 0
+        self._actor_junme: dict[int, int] = {}
+
+    def close(self):
+        self._gf.close()
+        self._inf.close()
+
+    def _ts(self) -> str:
+        return datetime.now().strftime("%H:%M:%S")
+
+    def write_game_flow(self, mjai_msg: dict):
+        if mjai_msg.get("type") == "start_kyoku":
+            self._kyoku = mjai_msg.get("kyoku", 0)
+            self._honba = mjai_msg.get("honba", 0)
+            self._junme = 0
+            self._actor_junme = {}
+        elif mjai_msg.get("type") == "tsumo":
+            actor = mjai_msg.get("actor", -1)
+            self._actor_junme[actor] = self._actor_junme.get(actor, 0) + 1
+            self._junme = self._actor_junme.get(0, 0)
+
+        record = {"ts": self._ts()}
+        record.update(mjai_msg)
+        self._gf.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+        self._gf.flush()
+
+    def write_inference(self, mjai_response: dict | None, tehai: list[str]):
+        if not mjai_response:
+            return
+        meta = mjai_response.get("meta")
+        if not meta:
+            return
+        top3 = [[label, round(float(score), 4)] for label, score in _meta_to_recommend(meta)[:3]]
+        action = {key: value for key, value in mjai_response.items() if key != "meta"}
+        record = {
+            "ts": self._ts(),
+            "kyoku": self._kyoku,
+            "honba": self._honba,
+            "junme": self._junme,
+            "tehai": tehai,
+            "shanten": meta.get("shanten"),
+            "furiten": meta.get("at_furiten", False),
+            "action": action,
+            "top3": top3,
+        }
+        self._inf.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+        self._inf.flush()
+
+
+def process_messages(message_client, mjai_controller, mjai_bot, jsonl_logger=None):
+    if not message_client.running:
+        return None
+    mjai_msgs = message_client.dump_messages()
+    if not mjai_msgs:
+        return None
+    try:
+        for mjai_msg in mjai_msgs:
+            logger.debug(f"-> {mjai_msg}")
+            if jsonl_logger:
+                jsonl_logger.write_game_flow(mjai_msg)
+        mjai_response = mjai_controller.react(mjai_msgs)
+        logger.debug(f"<- {mjai_response}")
+        mjai_bot.react(input_list=mjai_msgs)
+        if jsonl_logger:
+            jsonl_logger.write_inference(mjai_response, mjai_bot.tehai_mjai)
+        return {"mjai_msgs": mjai_msgs, "mjai_response": mjai_response}
+    except Exception:
+        logger.error(f"Error processing messages: {traceback.format_exc()}")
+        return None
 
 
 class ProtocolMessageClient:
@@ -267,7 +381,7 @@ async def run_session(total_games, message_client):
 
     # Per-session components; MJAI queue is shared across Liqi sessions.
     mjai_controller = Controller()
-    mjai_bot = AkagiBot()
+    mjai_bot = MjaiStateTracker()
     jsonl_logger = JsonlLogger()
     session_stop = threading.Event()
 
@@ -305,10 +419,6 @@ async def run_session(total_games, message_client):
         return result
 
     try:
-        if not await automation.initialize():
-            logger.error("Protocol failed to initialize")
-            return SessionResult(session_game_count)
-
         if not await automation.login(
             settings.autoplay_account.username,
             settings.autoplay_account.password,
@@ -552,7 +662,7 @@ async def run_session(total_games, message_client):
         try:
             await asyncio.wait_for(automation.close(), timeout=8)
         except Exception as exc:
-            logger.warning(f"Protocol automation close timed out/failed: {exc!r}")
+            logger.warning(f"Liqi client close timed out/failed: {exc!r}")
 
     return SessionResult(session_game_count)
 
@@ -563,7 +673,7 @@ async def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    logger.info("Starting Akagi (Full-Auto mode)...")
+    logger.info("Starting Majsoul autopilot (full-auto protocol mode)...")
     logger.info(f"Mode: {settings.autoplay_mode.type} | Room: {settings.autoplay_mode.room}")
 
     # Validate account settings
@@ -602,7 +712,7 @@ async def main():
     finally:
         running = False
         message_client.stop()
-        logger.info(f"Akagi (Full-Auto) stopped. Total games played: {total_games}")
+        logger.info(f"Majsoul autopilot stopped. Total games played: {total_games}")
 
 
 if __name__ == "__main__":
