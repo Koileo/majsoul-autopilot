@@ -108,95 +108,103 @@ async fn main() -> Result<()> {
             println!("fixture path ok: {}", fixture.display());
         }
         Command::Run { max_games } => {
-            let engine = CandleMortalEngine::load(&settings.model_path).with_context(|| {
-                format!("load exported Mortal model from {}", settings.model_path)
-            })?;
-            let mut client = session::ProtocolClient::login(
-                &settings.autoplay_account.username,
-                &settings.autoplay_account.password,
-                "rust-cli-device",
-            )
-            .await?;
-            let (mode, room) = (
-                client.summary.target_mode.clone(),
-                client.summary.target_room.clone(),
-            );
-            let existing = client.fetch_existing_game().await?;
-            let (game, initial_events) = if let Some(existing) = existing {
-                println!(
-                    "existing game found: account_id={} target={:?}/{:?} game_uuid={} location={} max_games={:?}",
-                    client.summary.account_id,
-                    mode,
-                    room,
-                    existing.game_uuid,
-                    existing.location,
-                    max_games
-                );
-                client.connect_existing_game(&existing).await?
-            } else {
-                match client.start_match().await? {
-                    StartMatchResult::Queued(match_sid) => {
-                        println!(
-                            "match queued: account_id={} target={:?}/{:?} match_sid={} max_games={:?}",
-                            client.summary.account_id, mode, room, match_sid, max_games
-                        );
-                        let start = client.wait_for_match_start().await?;
-                        println!(
-                            "match found: mode_id={} game_uuid={} location={} url={}",
-                            start.match_mode_id, start.game_uuid, start.location, start.game_url
-                        );
-                        client.connect_game(&start).await?
-                    }
-                    StartMatchResult::Busy => {
-                        if let Some(existing) = client.fetch_existing_game().await? {
-                            println!(
-                                "account busy; reconnecting existing game: account_id={} game_uuid={} location={}",
-                                client.summary.account_id, existing.game_uuid, existing.location
-                            );
-                            client.connect_existing_game(&existing).await?
-                        } else {
-                            println!(
-                                "account busy but fetchGamingInfo returned no game; leaving queue/game control alone"
-                            );
-                            return Ok(());
-                        }
-                    }
+            let mut games_done = 0u32;
+            loop {
+                if max_games.is_some_and(|limit| games_done >= limit) {
+                    println!("max games reached: {games_done}");
+                    break;
                 }
-            };
-            run_game_loop(game, initial_events, engine, max_games).await?;
+
+                let mut client = session::ProtocolClient::login(
+                    &settings.autoplay_account.username,
+                    &settings.autoplay_account.password,
+                    "rust-cli-device",
+                )
+                .await?;
+                let (game, initial_events) = connect_or_match_game(&mut client, max_games).await?;
+                let completed = run_game_loop(game, initial_events, &settings.model_path).await?;
+                games_done += completed;
+                println!("game loop completed: total_games={games_done}");
+            }
         }
     }
 
     Ok(())
 }
 
+async fn connect_or_match_game(
+    client: &mut session::ProtocolClient,
+    max_games: Option<u32>,
+) -> Result<(session::GameSession, Vec<bridge::Event>)> {
+    let (mode, room) = (
+        client.summary.target_mode.clone(),
+        client.summary.target_room.clone(),
+    );
+    if let Some(existing) = client.fetch_existing_game().await? {
+        println!(
+            "existing game found: account_id={} target={:?}/{:?} game_uuid={} location={} max_games={:?}",
+            client.summary.account_id,
+            mode,
+            room,
+            existing.game_uuid,
+            existing.location,
+            max_games
+        );
+        return client.connect_existing_game(&existing).await;
+    }
+
+    match client.start_match().await? {
+        StartMatchResult::Queued(match_sid) => {
+            println!(
+                "match queued: account_id={} target={:?}/{:?} match_sid={} max_games={:?}",
+                client.summary.account_id, mode, room, match_sid, max_games
+            );
+            let start = client.wait_for_match_start().await?;
+            println!(
+                "match found: mode_id={} game_uuid={} location={} url={}",
+                start.match_mode_id, start.game_uuid, start.location, start.game_url
+            );
+            client.connect_game(&start).await
+        }
+        StartMatchResult::Busy => {
+            if let Some(existing) = client.fetch_existing_game().await? {
+                println!(
+                    "account busy; reconnecting existing game: account_id={} game_uuid={} location={}",
+                    client.summary.account_id, existing.game_uuid, existing.location
+                );
+                client.connect_existing_game(&existing).await
+            } else {
+                Err(anyhow!(
+                    "account busy but fetchGamingInfo returned no active game"
+                ))
+            }
+        }
+    }
+}
+
 async fn run_game_loop(
     mut game: session::GameSession,
     initial_events: Vec<bridge::Event>,
-    engine: CandleMortalEngine,
-    max_games: Option<u32>,
-) -> Result<()> {
+    model_path: &str,
+) -> Result<u32> {
     println!(
         "game connected: initial_events={} operation_window={}",
         initial_events.len(),
         game.bridge.last_operation_list().len()
     );
 
+    let engine = CandleMortalEngine::load(model_path)
+        .with_context(|| format!("load exported Mortal model from {model_path}"))?;
     let mut bot = NativeBot::new(game.bridge.seat() as u8, engine);
     let mut queue = VecDeque::new();
-    let mut games_done = 0u32;
     if !initial_events.is_empty() {
         let mut last_action_json = None;
         for event in &initial_events {
             println!("restore event: {:?}", event);
             if matches!(event, bridge::Event::EndGame) {
-                games_done += 1;
+                return Ok(1);
             }
             last_action_json = bot.react(event)?;
-        }
-        if max_games.is_some_and(|limit| games_done >= limit) {
-            println!("max games reached in restore: {games_done}");
-            return Ok(());
         }
         if let Some(action_json) = last_action_json {
             let ack_events = handle_bot_action_json(&mut game, &mut bot, action_json).await?;
@@ -215,18 +223,12 @@ async fn run_game_loop(
 
         println!("event: {:?}", event);
         if matches!(event, bridge::Event::EndGame) {
-            games_done += 1;
-            if max_games.is_some_and(|limit| games_done >= limit) {
-                println!("max games reached: {games_done}");
-                break;
-            }
+            return Ok(1);
         }
 
         let ack_events = handle_bot_event(&mut game, &mut bot, &event).await?;
         queue.extend(ack_events);
     }
-
-    Ok(())
 }
 
 fn read_settings(path: &PathBuf) -> Result<Settings> {
@@ -273,9 +275,7 @@ fn resolve_riichi_action(
     action_json: String,
 ) -> Result<String> {
     let mut action: Value = serde_json::from_str(&action_json)?;
-    if action.get("type").and_then(Value::as_str) != Some("reach")
-        || action.get("pai").is_some()
-    {
+    if action.get("type").and_then(Value::as_str) != Some("reach") || action.get("pai").is_some() {
         return Ok(action_json);
     }
 
@@ -287,7 +287,10 @@ fn resolve_riichi_action(
     if let Some(dahai_json) = bot.react(&reach_event)? {
         let dahai: Value = serde_json::from_str(&dahai_json)?;
         if dahai.get("type").and_then(Value::as_str) == Some("dahai") {
-            action["pai"] = dahai.get("pai").cloned().unwrap_or(Value::String(String::new()));
+            action["pai"] = dahai
+                .get("pai")
+                .cloned()
+                .unwrap_or(Value::String(String::new()));
             action["tsumogiri"] = dahai
                 .get("tsumogiri")
                 .cloned()
@@ -418,19 +421,18 @@ async fn execute_pending_action(
                 if let Some(op_context) = game.bridge.last_operation_context().cloned() {
                     if op_context.source == "ActionNewRound" {
                         if moqie {
-                            println!("opening-round discard uses hand-discard mode instead of moqie");
+                            println!(
+                                "opening-round discard uses hand-discard mode instead of moqie"
+                            );
                             moqie = false;
                         }
                         wait_opening_round_discard_window(&op_context).await;
-                        let still_same_window = game
-                            .bridge
-                            .last_operation_context()
-                            .is_some_and(|current| {
+                        let still_same_window =
+                            game.bridge.last_operation_context().is_some_and(|current| {
                                 current.source == op_context.source
                                     && current.seat == op_context.seat
                                     && current.received_key == op_context.received_key
-                            })
-                            && game
+                            }) && game
                                 .bridge
                                 .last_operation_list()
                                 .iter()
@@ -487,7 +489,9 @@ async fn wait_for_discard_ack(
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return Err(anyhow!("discard RPC accepted but no matching broadcast ACK arrived"));
+            return Err(anyhow!(
+                "discard RPC accepted but no matching broadcast ACK arrived"
+            ));
         }
         let events = tokio::time::timeout(remaining, game.next_events()).await??;
         if game.bridge.round_end_counter() > before_round {
