@@ -41,6 +41,7 @@ from mjai_bot.bot import MjaiStateTracker
 from mjai_bot.controller import Controller
 from settings import settings
 from majsoul.client import MajsoulAutomation
+from majsoul.bridge import get_last_operation_context
 
 MAX_GAMES_BEFORE_RESTART = 3  # Soft-restart protocol session after this many games
 BUSY_SESSION_RETRY_SECONDS = 60
@@ -352,8 +353,12 @@ def game_loop(message_client, mjai_controller, mjai_bot, jsonl_logger, session_s
                         # No pending operation — don't send skip
                         pass
                     elif action_type:
+                        action = dict(mjai_response)
+                        op_context = get_last_operation_context()
+                        if op_context and can_act:
+                            action["_operation_context"] = op_context
                         with pending_action_lock:
-                            pending_action = mjai_response
+                            pending_action = action
                         if action_type != "none":
                             logger.info(
                                 f"Bot action: {action_type} | "

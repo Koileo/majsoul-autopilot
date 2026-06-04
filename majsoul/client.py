@@ -37,8 +37,8 @@ PACKAGE_VERSION = "4.0.44"
 CLIENT_VERSION_STRING = f"WebGL_2022-{RESOURCE_VERSION.removesuffix('.w')}"
 LOGIN_BEAT_CONTRACT = "DF2vkXCnfeXp4WoGrBGNcJBufZiMN3uP"
 SERVER_COOLDOWN_ERROR_CODE = 503
-ACTION_DELAY_MIN = 1.0
-ACTION_DELAY_MAX = 3.0
+ACTION_DELAY_MIN = 0.05
+ACTION_DELAY_MAX = 0.25
 
 StartMatchResult = Literal["queued", "busy", "error"]
 
@@ -795,8 +795,11 @@ class MajsoulAutomation:
 
     async def execute_action(self, mjai_action: dict, seat: int):
         action_type = mjai_action.get("type")
-        if action_type in ("none", None):
+        if action_type is None:
             return await self._send_skip()
+
+        if self._operation_window_changed(mjai_action):
+            return True
 
         delay = random.uniform(
             ACTION_DELAY_MIN,
@@ -804,11 +807,16 @@ class MajsoulAutomation:
         )
         await asyncio.sleep(delay)
 
+        if self._operation_window_changed(mjai_action):
+            return True
+
         pai = mjai_action.get("pai", "")
         tile = MJAI_TO_MS_TILE.get(pai, pai)
 
         if action_type == "dahai":
             return await self._send_discard_with_retry(tile, mjai_action.get("tsumogiri", False), seat)
+        elif action_type == "none":
+            return await self._send_skip()
         elif action_type == "reach":
             operations = get_last_operation_list()
             liqi_op = next((op for op in operations if op.get("type") == OP_LIQI), None)
@@ -853,6 +861,31 @@ class MajsoulAutomation:
         else:
             logger.warning(f"Unknown action type: {action_type}")
             return False
+
+    def _operation_window_changed(self, mjai_action: dict) -> bool:
+        expected = mjai_action.get("_operation_context") or {}
+        if not expected:
+            return False
+
+        current = get_last_operation_context()
+        expected_key = (
+            expected.get("source"),
+            expected.get("seat"),
+            expected.get("received_monotonic"),
+        )
+        current_key = (
+            current.get("source"),
+            current.get("seat"),
+            current.get("received_monotonic"),
+        )
+        if current_key == expected_key:
+            return False
+
+        logger.info(
+            "Stale action ignored; operation window changed before submit "
+            f"action={mjai_action.get('type')} expected={expected_key} current={current_key}"
+        )
+        return True
 
     async def handle_end_game(self):
         self.in_game = False
@@ -1353,6 +1386,25 @@ class MajsoulAutomation:
             self.game = None
             return False
 
+        try:
+            clear = await self.game.request(".lq.FastTest.clearLeaving", {}, timeout=8)
+            err = _as_error(clear.get("data"))
+            if err.get("code") == 2:
+                logger.info("clearLeaving skipped; no leaving state was active")
+            elif err.get("code"):
+                logger.warning(
+                    f"clearLeaving failed "
+                    f"({source}, host_route={route_id}, request_route={request_route_id}): "
+                    f"{_format_error(err)}"
+                )
+            else:
+                logger.info("Cleared game leaving state")
+        except Exception as exc:
+            logger.warning(
+                f"clearLeaving failed/skipped "
+                f"({source}, host_route={route_id}, request_route={request_route_id}): {exc!r}"
+            )
+
         self.matching = False
         self.in_game = True
         self.account_busy = False
@@ -1557,7 +1609,7 @@ class MajsoulAutomation:
         return True
 
     async def _send_skip(self) -> bool:
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.05)
         if not self.game:
             return False
         result = await self.game.request(
