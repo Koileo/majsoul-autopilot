@@ -4,6 +4,9 @@ __pycache__/
 *.egg-info/
 .venv/
 
+# Rust
+target/
+
 # IDE
 .idea/
 

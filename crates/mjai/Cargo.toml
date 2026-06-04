@@ -1,0 +1,11 @@
+[package]
+name = "mjai"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+liqi = { path = "../liqi" }
+prost.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,10 @@
+[package]
+name = "autoplay"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+liqi = { path = "../liqi" }
+mjai = { path = "../mjai" }
+thiserror.workspace = true

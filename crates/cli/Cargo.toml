@@ -1,0 +1,17 @@
+[package]
+name = "majsoul-autopilot-rs"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "majsoul-autopilot-rs"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+protocol = { path = "../protocol" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
