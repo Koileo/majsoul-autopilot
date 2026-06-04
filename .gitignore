@@ -6,6 +6,7 @@ __pycache__/
 
 # Rust
 target/
+dist/
 
 # IDE
 .idea/
