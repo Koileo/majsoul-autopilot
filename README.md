@@ -1,28 +1,39 @@
-# majsoul-autopilot-rs
+# majsoul-autopilot
 
-纯 Rust 版雀魂自动打牌运行时。
+A pure Rust Mahjong Soul autopilot powered by the Mortal model and the Liqi protocol.
 
-这个分支只保留 Rust runtime：不使用浏览器、不走视觉识别、不依赖 Python 运行自动打牌。程序通过 Liqi 协议登录、匹配、进局、重连，并使用导出的 Mortal 模型进行四人麻将决策。
+The project runs as a command-line tool. It logs in with an email account, joins ranked four-player rooms, connects to live games through the Liqi websocket protocol, and lets a Mortal model choose actions.
 
-## 当前能力
+## Features
 
-- 四人麻将段位场自动打牌
-- 邮箱密码登录
-- Liqi 纯协议 lobby/game websocket
-- 断线或账号已在对局时重连已有对局
-- Mortal 原生 Candle 推理
-- 立直二段决策：先向模型喂 `reach`，再按模型返回的 `dahai` 选择宣言牌
-- operation stale guard 与 discard ACK 校验
-- 段位自动切房：
-  - 未到雀士：铜之间四人东
-  - 到雀士：银之间四人南
-  - 到雀杰及以上：金之间四人南
+- Pure protocol automation for Mahjong Soul
+- Four-player ranked matchmaking
+- Automatic room selection by rank
+- Native Mortal inference with Candle
+- Reconnect support for active games
+- Riichi declaration handling with Mortal's two-step decision flow
+- Stale operation guard and discard acknowledgement checks
+- No browser automation, screenshots, or coordinate clicking
 
-不支持三麻入口。
+## Room Policy
 
-## macOS M 系列 Release 包
+The runner selects a target room from the account rank:
 
-release zip 目录结构：
+| Rank | Mode |
+| --- | --- |
+| Below Adept | Bronze Room, East game |
+| Adept | Silver Room, South game |
+| Expert or higher | Gold Room, South game |
+
+Three-player mode is not supported.
+
+## Download
+
+Prebuilt macOS Apple Silicon packages are available from GitHub Releases:
+
+[Download the latest release](https://github.com/happy-shine/majsoul-autopilot/releases/latest)
+
+The macOS arm64 package contains:
 
 ```text
 majsoul-autopilot-rs-macos-arm64/
@@ -35,14 +46,16 @@ majsoul-autopilot-rs-macos-arm64/
       model_config.json
 ```
 
-解压后进入目录：
+## Quick Start
+
+Unzip the release package and enter the extracted directory:
 
 ```bash
 cd majsoul-autopilot-rs-macos-arm64
 cp settings.example.json settings.json
 ```
 
-编辑 `settings.json`：
+Edit `settings.json`:
 
 ```json
 {
@@ -54,57 +67,35 @@ cp settings.example.json settings.json
 }
 ```
 
-检查模型：
+Check the model:
 
 ```bash
 ./majsoul-autopilot-rs --settings settings.json check-model
 ```
 
-检查登录和当前段位目标：
+Check login and target room:
 
 ```bash
 ./majsoul-autopilot-rs --settings settings.json check-login
 ```
 
-开始自动打牌：
-
-```bash
-./majsoul-autopilot-rs --settings settings.json run
-```
-
-只跑一局 smoke test：
+Run one game:
 
 ```bash
 ./majsoul-autopilot-rs --settings settings.json run --max-games 1
 ```
 
-停止运行使用 `Ctrl-C`。
-
-## 从源码构建
-
-需要 Rust toolchain。macOS M 系列默认目标是 `aarch64-apple-darwin`。
+Run continuously:
 
 ```bash
-cargo build --release -p majsoul-autopilot-rs
+./majsoul-autopilot-rs --settings settings.json run
 ```
 
-构建产物：
+Stop the runner with `Ctrl-C`.
 
-```text
-target/release/majsoul-autopilot-rs
-```
+## Configuration
 
-运行前需要准备：
-
-- `settings.json`
-- `models/mortal-298k/model.safetensors`
-- `models/mortal-298k/model_config.json`
-
-模型权重和本地账号配置默认不提交到 git。
-
-## 配置文件
-
-最小配置只需要三项：
+`settings.json` is the only required runtime configuration file.
 
 ```json
 {
@@ -116,34 +107,81 @@ target/release/majsoul-autopilot-rs
 }
 ```
 
-字段说明：
+Fields:
 
-- `model_path`：导出的 Mortal 模型目录，目录内需要 `model.safetensors` 和 `model_config.json`
-- `autoplay_account.username`：雀魂邮箱账号
-- `autoplay_account.password`：雀魂密码，运行时会按雀魂登录协议计算摘要
+| Field | Description |
+| --- | --- |
+| `model_path` | Directory containing `model.safetensors` and `model_config.json` |
+| `autoplay_account.username` | Mahjong Soul email account |
+| `autoplay_account.password` | Mahjong Soul password |
 
-## 命令
+`settings.json` is ignored by git because it contains credentials.
+
+## Commands
 
 ```bash
-./majsoul-autopilot-rs --settings settings.json check-model
-./majsoul-autopilot-rs --settings settings.json check-login
-./majsoul-autopilot-rs --settings settings.json run
-./majsoul-autopilot-rs --settings settings.json run --max-games 1
-./majsoul-autopilot-rs --settings settings.json replay-fixture path/to/fixture.json
+majsoul-autopilot-rs --settings settings.json check-model
+majsoul-autopilot-rs --settings settings.json check-login
+majsoul-autopilot-rs --settings settings.json run
+majsoul-autopilot-rs --settings settings.json run --max-games 1
+majsoul-autopilot-rs --settings settings.json replay-fixture path/to/fixture.json
 ```
 
-## 验证
+## Build From Source
 
-源码验证：
+Install Rust, then build the CLI:
+
+```bash
+cargo build --release -p majsoul-autopilot-rs
+```
+
+The binary is generated at:
+
+```text
+target/release/majsoul-autopilot-rs
+```
+
+For local runs from source, prepare:
+
+```text
+settings.json
+models/mortal-298k/model.safetensors
+models/mortal-298k/model_config.json
+```
+
+Model weights and local credentials are not committed to the repository.
+
+## Development
+
+Run tests:
 
 ```bash
 cargo test --workspace -- --nocapture
+```
+
+Run clippy:
+
+```bash
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-release 包验证：
+## Project Layout
 
-```bash
-./majsoul-autopilot-rs --settings settings.json check-model
-./majsoul-autopilot-rs --settings settings.json check-login
+```text
+crates/
+  autoplay/      action planning and operation guards
+  cli/           command-line entry point
+  liqi/          protobuf types and Liqi framing
+  mjai/          Liqi-to-MJAI event bridge
+  mortal/        Mortal inference and action decoding
+  protocol/      lobby/game websocket client
+  riichi-core/   riichi state and observation encoding
 ```
+
+## Disclaimer
+
+This project is for research and experimentation. Use it at your own risk and review the rules of any service you connect to.
+
+## License
+
+GPL-3.0-or-later. See [LICENSE.txt](LICENSE.txt).
