@@ -1,5 +1,7 @@
 # majsoul-autopilot
 
+[中文文档](README.zh-CN.md)
+
 A pure Rust Mahjong Soul autopilot powered by the Mortal model and the Liqi protocol.
 
 The project runs as a command-line tool. It logs in with an email account, joins ranked four-player rooms, connects to live games through the Liqi websocket protocol, and lets a Mortal model choose actions.
@@ -40,6 +42,7 @@ majsoul-autopilot-rs-macos-arm64/
   majsoul-autopilot-rs
   settings.example.json
   README.md
+  README.zh-CN.md
   models/
     mortal-298k/
       model.safetensors
