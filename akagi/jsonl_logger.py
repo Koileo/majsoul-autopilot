@@ -40,12 +40,12 @@ class JsonlLogger:
         self._gf.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
         self._gf.flush()
 
-    def write_inference(self, mjai_response: dict, tehai: list[str], is_3p: bool):
+    def write_inference(self, mjai_response: dict, tehai: list[str]):
         meta = mjai_response.get("meta")
         if not meta:
             return
         from akagi.libriichi_helper import meta_to_recommend
-        recommend = meta_to_recommend(meta, is_3p)
+        recommend = meta_to_recommend(meta)
         top3 = [[r[0], round(float(r[1]), 4)] for r in recommend[:3]]
 
         action = {k: v for k, v in mjai_response.items() if k != "meta"}

@@ -8,27 +8,8 @@
     "type": "4p_south",
     "room": "gold"
   },
-  "autoplay_headless": true,
   "autoplay_time": {
-    "first_tile": 5.0,
     "rand_min": 1.0,
-    "rand_max": 3.0,
-    "candidate": 0.5
-  },
-  "mitm": {
-    "type": "majsoul",
-    "host": "127.0.0.1",
-    "port": 7880
-  },
-  "model": "mortal",
-  "theme": "textual-dark",
-  "ot_server": {
-    "server": "http://127.0.0.1:5000",
-    "online": false,
-    "api_key": "your_api_key"
-  },
-  "autoplay": false,
-  "auto_switch_model": true,
-  "recommendation_temperature": 0.3,
-  "webui_port": 3002
+    "rand_max": 3.0
+  }
 }

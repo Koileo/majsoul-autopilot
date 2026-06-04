@@ -7,9 +7,9 @@ import sys
 import time
 import signal
 import asyncio
+import queue
 import threading
 import traceback
-import subprocess
 from dataclasses import dataclass
 from typing import Literal
 from loguru import logger as main_logger
@@ -33,11 +33,8 @@ _stderr = _Unbuffered(sys.stderr)
 main_logger.add(_stderr, level="DEBUG",
                 filter=lambda record: record["extra"].get("module") in ("akagi", "autoplay", "mjai_bot"),
                 format="{time:HH:mm:ss} | {level: <5} | {message}")
-import uvicorn
 from akagi.core import process_messages
 from akagi.jsonl_logger import JsonlLogger
-from akagi.webui.server import app, watcher
-from mitm.client import Client
 from mjai_bot.bot import AkagiBot
 from mjai_bot.controller import Controller
 from settings.settings import settings
@@ -45,38 +42,6 @@ from autoplay.protocol_automation import MajsoulAutomation
 
 MAX_GAMES_BEFORE_RESTART = 3  # Soft-restart protocol session after this many games
 BUSY_SESSION_RETRY_SECONDS = 60
-MAJSOUL_TAB_CLEANUP_SCRIPT = r'''
-tell application "System Events"
-    set chromeRunning to exists process "Google Chrome"
-    set chromiumRunning to exists process "Chromium"
-end tell
-
-if chromeRunning then
-    tell application "Google Chrome"
-        repeat with w in windows
-            repeat with i from (count of tabs of w) to 1 by -1
-                try
-                    set tabUrl to URL of tab i of w
-                    if tabUrl contains "game.maj-soul.com" then close tab i of w
-                end try
-            end repeat
-        end repeat
-    end tell
-end if
-
-if chromiumRunning then
-    tell application "Chromium"
-        repeat with w in windows
-            repeat with i from (count of tabs of w) to 1 by -1
-                try
-                    set tabUrl to URL of tab i of w
-                    if tabUrl contains "game.maj-soul.com" then close tab i of w
-                end try
-            end repeat
-        end repeat
-    end tell
-end if
-'''
 
 SessionState = Literal["stopped", "busy"]
 
@@ -86,6 +51,27 @@ class SessionResult:
     games: int
     state: SessionState = "stopped"
     retry_at: int | None = None
+
+
+class ProtocolMessageClient:
+    """Minimal in-process MJAI queue used by the Liqi protocol controller."""
+
+    def __init__(self):
+        self.messages: queue.Queue[dict] = queue.Queue()
+        self.running = False
+        self.ws_disconnected = threading.Event()
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+    def dump_messages(self) -> list[dict]:
+        messages = []
+        while not self.messages.empty():
+            messages.append(self.messages.get())
+        return messages
 
 
 def _session_restart_delay(result: SessionResult) -> int:
@@ -146,31 +132,6 @@ def _resolve_riichi_discard(
     return resolved
 
 
-def _run_best_effort(args: list[str], label: str, *, timeout: float = 5) -> None:
-    try:
-        subprocess.run(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=timeout,
-            check=False,
-        )
-    except Exception as exc:
-        logger.warning(f"{label} skipped/failed: {exc!r}")
-
-
-def _cleanup_existing_majsoul_clients() -> None:
-    """Close browser clients that can race the protocol-only controller."""
-    logger.info("Closing existing Majsoul browser clients before protocol takeover")
-    _run_best_effort(
-        ["osascript", "-e", MAJSOUL_TAB_CLEANUP_SCRIPT],
-        "Majsoul browser tab cleanup",
-    )
-    _run_best_effort(
-        ["pkill", "-f", "ms-playwright.*Chromium"],
-        "stale Playwright Chromium cleanup",
-    )
-
 running = True
 _interrupt_count = 0
 # Shared state between game_loop thread and async main
@@ -219,7 +180,7 @@ async def _wait_busy_account_until_lobby(automation) -> Literal["lobby", "busy"]
     )
 
 
-def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop):
+def game_loop(message_client, mjai_controller, mjai_bot, jsonl_logger, session_stop):
     """Process game messages and store actions for the automation to execute."""
     global running, pending_action, game_active
 
@@ -227,7 +188,7 @@ def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop
 
     while running and not session_stop.is_set():
         try:
-            result = process_messages(mitm_client, mjai_controller, mjai_bot, jsonl_logger)
+            result = process_messages(message_client, mjai_controller, mjai_bot, jsonl_logger)
             if result:
                 mjai_msgs = result["mjai_msgs"]
                 mjai_response = result["mjai_response"]
@@ -236,11 +197,11 @@ def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop
 
                 for msg in mjai_msgs:
                     if msg.get("type") == "start_game":
-                        logger.info("Game started (MITM detected start_game)")
+                        logger.info("Game started (protocol detected start_game)")
                         game_active = True
                         game_started_event.set()
                     elif msg.get("type") == "end_game":
-                        logger.info("Game ended (MITM detected end_game)")
+                        logger.info("Game ended (protocol detected end_game)")
                         game_active = False
                         game_ended_event.set()
                     # Track our tsumo tile for riichi
@@ -290,15 +251,13 @@ def game_loop(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop
         time.sleep(0.05)
 
 
-async def run_session(total_games, mitm_client):
+async def run_session(total_games, message_client):
     """Run one protocol session: login, play N games, then tear down.
 
-    MITM proxy and WebUI stay alive across sessions; only Liqi sockets restart.
+    The MJAI queue stays alive across sessions; only Liqi sockets restart.
     Returns the number of games played plus the terminal session state.
     """
     global running, pending_action, game_active
-
-    _cleanup_existing_majsoul_clients()
 
     # Reset shared state
     pending_action = None
@@ -306,7 +265,7 @@ async def run_session(total_games, mitm_client):
     game_started_event.clear()
     game_ended_event.clear()
 
-    # Per-session components (MITM is passed in from main)
+    # Per-session components; MJAI queue is shared across Liqi sessions.
     mjai_controller = Controller()
     mjai_bot = AkagiBot()
     jsonl_logger = JsonlLogger()
@@ -314,13 +273,13 @@ async def run_session(total_games, mitm_client):
 
     game_thread = threading.Thread(
         target=game_loop,
-        args=(mitm_client, mjai_controller, mjai_bot, jsonl_logger, session_stop),
+        args=(message_client, mjai_controller, mjai_bot, jsonl_logger, session_stop),
         daemon=True,
     )
     game_thread.start()
 
     automation = MajsoulAutomation(
-        mitm_client.messages,
+        message_client.messages,
         should_continue=lambda: running,
     )
     session_game_count = 0
@@ -346,11 +305,8 @@ async def run_session(total_games, mitm_client):
         return result
 
     try:
-        await automation.start_browser(proxy_port=settings.mitm.port)
-        await automation.navigate_to_game()
-
-        if not await automation.wait_for_entrance():
-            logger.error("Game failed to initialize")
+        if not await automation.initialize():
+            logger.error("Protocol failed to initialize")
             return SessionResult(session_game_count)
 
         if not await automation.login(
@@ -426,7 +382,7 @@ async def run_session(total_games, mitm_client):
 
                     consecutive_errors = 0
 
-                    # Wait for game to start (MITM detects start_game)
+                    # Wait for protocol bridge to emit start_game
                     logger.info("Waiting for match...")
                     game_started_event.clear()
                     game_ended_event.clear()
@@ -501,10 +457,10 @@ async def run_session(total_games, mitm_client):
 
                     await asyncio.sleep(0.1)
 
-                    # Fast recovery: MITM detected all WebSocket connections closed
-                    if mitm_client.ws_disconnected.is_set():
+                    # Fast recovery: protocol detected all WebSocket connections closed
+                    if message_client.ws_disconnected.is_set():
                         logger.warning("WebSocket disconnected mid-game — recovering immediately")
-                        mitm_client.ws_disconnected.clear()
+                        message_client.ws_disconnected.clear()
                         game_active = False
                         game_ended_event.set()
                         recovered_state = await recover_state("websocket disconnected mid-game")
@@ -615,32 +571,17 @@ async def main():
         logger.error("Please configure autoplay_account in settings.json")
         return
 
-    # Start WebUI server (persists across soft-restarts)
-    webui_port = settings.webui_port
-    webui_thread = threading.Thread(
-        target=lambda: uvicorn.run(app, host="0.0.0.0", port=webui_port, log_level="warning"),
-        daemon=True,
-    )
-    webui_thread.start()
-
-    watcher_thread = threading.Thread(
-        target=lambda: asyncio.run(watcher.start()),
-        daemon=True,
-    )
-    watcher_thread.start()
-    logger.info(f"WebUI available at http://localhost:{webui_port}")
-
     total_games = 0
 
-    # MITM proxy lives for the entire process lifetime
-    mitm_client = Client()
-    mitm_client.start()
-    logger.info("MITM proxy started")
+    # The protocol controller writes MJAI messages directly into this queue.
+    message_client = ProtocolMessageClient()
+    message_client.start()
+    logger.info("Protocol message queue initialized")
 
     try:
         while running:
             logger.info(f"--- Starting new session (total games so far: {total_games}) ---")
-            session_result = await run_session(total_games, mitm_client)
+            session_result = await run_session(total_games, message_client)
             total_games += session_result.games
 
             if not running:
@@ -660,8 +601,7 @@ async def main():
         logger.info("Interrupted by user")
     finally:
         running = False
-        mitm_client.stop()
-        watcher.stop()
+        message_client.stop()
         logger.info(f"Akagi (Full-Auto) stopped. Total games played: {total_games}")
 
 

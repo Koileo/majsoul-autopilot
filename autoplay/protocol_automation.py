@@ -52,17 +52,7 @@ RESOURCE_VERSION = "0.16.229"
 PACKAGE_VERSION = "4.0.44"
 CLIENT_VERSION_STRING = f"WebGL_2022-{RESOURCE_VERSION.removesuffix('.w')}"
 LOGIN_BEAT_CONTRACT = "DF2vkXCnfeXp4WoGrBGNcJBufZiMN3uP"
-DNS_GOOGLE_RESOLVE_URL = "https://dns.google/resolve"
 SERVER_COOLDOWN_ERROR_CODE = 503
-
-KNOWN_ROUTE_PUBLIC_IPS = {
-    "route-2.maj-soul.com": ["170.33.12.14"],
-    "route-3.maj-soul.com": ["49.0.230.245"],
-    "route-4.maj-soul.com": ["155.102.209.208", "155.102.209.204", "155.102.209.201"],
-    "route-5.maj-soul.com": ["164.52.11.66"],
-    "route-6.maj-soul.com": ["123.108.75.47", "123.108.75.52"],
-}
-_route_dns_cache: dict[str, list[str]] = {}
 
 StartMatchResult = Literal["queued", "busy", "error"]
 
@@ -236,16 +226,6 @@ MATCH_MODE_IDS = {
     ("4p_south", "jade"): 12,
     ("4p_east", "throne"): 15,
     ("4p_south", "throne"): 16,
-    ("3p_east", "bronze"): 17,
-    ("3p_south", "bronze"): 18,
-    ("3p_east", "silver"): 19,
-    ("3p_south", "silver"): 20,
-    ("3p_east", "gold"): 21,
-    ("3p_south", "gold"): 22,
-    ("3p_east", "jade"): 23,
-    ("3p_south", "jade"): 24,
-    ("3p_east", "throne"): 25,
-    ("3p_south", "throne"): 26,
 }
 
 RANK_TIER_NAMES = {
@@ -378,60 +358,8 @@ def _endpoint_ws_url(endpoint: dict[str, Any]) -> str | None:
     return f"wss://{address}:{port}/gateway"
 
 
-def _is_fake_ip(ip: str) -> bool:
-    return ip.startswith("198.18.") or ip.startswith("198.19.")
-
-
-def _public_route_ips_from_dns_answer(answer: dict[str, Any]) -> list[str]:
-    ips: list[str] = []
-    for item in answer.get("Answer") or []:
-        try:
-            record_type = int(item.get("type") or 0)
-        except (TypeError, ValueError):
-            continue
-        data = str(item.get("data") or "").strip().rstrip(".")
-        if record_type != 1 or not data or _is_fake_ip(data):
-            continue
-        if data not in ips:
-            ips.append(data)
-    return ips
-
-
-def _resolve_public_route_ips(hostname: str) -> list[str]:
-    if not hostname.endswith(".maj-soul.com") or not hostname.startswith("route-"):
-        return []
-    cached = _route_dns_cache.get(hostname)
-    if cached:
-        return cached
-
-    known_ips = KNOWN_ROUTE_PUBLIC_IPS.get(hostname, [])
-    if known_ips:
-        _route_dns_cache[hostname] = known_ips
-        return known_ips
-
-    ips: list[str] = []
-    query = urllib.parse.urlencode({"name": hostname, "type": "A"})
-    try:
-        with urllib.request.urlopen(f"{DNS_GOOGLE_RESOLVE_URL}?{query}", timeout=4) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        ips = _public_route_ips_from_dns_answer(payload)
-    except Exception as exc:
-        logger.warning(f"Public DNS resolve failed for {hostname}: {exc!r}")
-
-    if ips:
-        _route_dns_cache[hostname] = ips
-    return ips
-
-
-def _route_tcp_overrides(url: str) -> list[tuple[str, int]]:
-    parsed = urlparse(url)
-    hostname = parsed.hostname or ""
-    port = parsed.port or (443 if parsed.scheme == "wss" else 80)
-    return [(ip, port) for ip in _resolve_public_route_ips(hostname)]
-
-
-def _route_tcp_attempts(url: str) -> list[tuple[str | None, int | None]]:
-    return [(None, None), *_route_tcp_overrides(url)]
+def _route_tcp_attempts(_url: str) -> list[tuple[str | None, int | None]]:
+    return [(None, None)]
 
 
 def _prepare_login_body(access_token: str) -> bytes:
@@ -576,12 +504,6 @@ class LiqiSocket:
         errors: list[str] = []
         for tcp_host, tcp_port in attempts:
             kwargs = dict(base_kwargs)
-            if tcp_host:
-                kwargs["host"] = tcp_host
-                kwargs["port"] = tcp_port
-                logger.info(
-                    f"Using public TCP endpoint for {self.name}: {tcp_host}:{tcp_port}"
-                )
             try:
                 self.ws = await websockets.connect(self.url, **kwargs)
                 break
@@ -759,14 +681,8 @@ class MajsoulAutomation:
         except Exception:
             return True
 
-    async def start_browser(self, proxy_port: int = None):
-        logger.info("Protocol automation initialized (no browser/canvas)")
-
-    async def navigate_to_game(self):
-        logger.info("Skipping browser page load; using Liqi protocol")
-
-    async def wait_for_entrance(self, timeout: float = 180):
-        logger.info("Unity entrance wait bypassed; protocol client is ready")
+    async def initialize(self) -> bool:
+        logger.info("Protocol automation initialized")
         return True
 
     async def login(self, username: str, password: str, *, reconnect: bool = False):

@@ -11,7 +11,6 @@ class AkagiBot(Bot):
     """
     def __init__(self):
         super().__init__()
-        self.is_3p = False
 
     def think(self) -> str:
         """
@@ -37,24 +36,9 @@ class AkagiBot(Bot):
                 if event["type"] == "start_game":
                     self.player_id = event["id"]
                     self.player_state = PlayerState(self.player_id)
-                    self.is_3p = False
                     self.__discard_events = []
                     self.__call_events = []
                     self.__dora_indicators = []
-                if event["type"] == "start_kyoku":
-                    if (
-                        # event["bakaze"] == "E" and
-                        # event["honba"] == 0 and
-                        # event["kyoku"] == 1 and
-                        # event["kyotaku"] == 0 and
-                        # event["oya"] == 0 and
-                        # event["scores"][3] == 0
-                        event["scores"][0] == 35000 and
-                        event["scores"][1] == 35000 and
-                        event["scores"][2] == 35000 and
-                        event["scores"][3] == 0
-                    ):
-                        self.is_3p = True
                 if event["type"] == "start_kyoku" or event["type"] == "dora":
                     self.__dora_indicators.append(event["dora_marker"])
                 if event["type"] == "dahai":
@@ -67,22 +51,6 @@ class AkagiBot(Bot):
                     "ankan",
                 ]:
                     self.__call_events.append(event)
-                # This is a patch for Three-Player-Mahjong, since the
-                # smly/mjai library does not support 3P Mahjong.
-                if event["type"] == "nukidora":
-                    logger.debug(f"Event: {event}")
-                    replace_event = {
-                        "type": "dahai",
-                        "actor": event["actor"],
-                        "pai": "N",
-                        "tsumogiri": self.last_self_tsumo == "N" and event["actor"] == self.player_id,
-                    }
-                    self.__discard_events.append(replace_event)
-                    self.action_candidate = self.player_state.update(
-                        json.dumps(replace_event)
-                    )
-                    continue
-
                 logger.debug(f"Event: {event}")
                 self.action_candidate = self.player_state.update(
                     json.dumps(event)
@@ -329,18 +297,3 @@ class AkagiBot(Bot):
             ]
             pon_candidates.append(consumed)
         return pon_candidates
-    
-    @property
-    def can_act_3p(self) -> bool:
-        """
-        Check if the bot can act in 3-player mode.
-        """
-        return (
-            self.can_discard or
-            self.can_riichi or
-            self.can_pon or
-            self.can_agari or
-            self.can_ryukyoku or
-            self.can_kan 
-            # self.tehai_vec34[9*3+3] > 0 # nukidora
-        )

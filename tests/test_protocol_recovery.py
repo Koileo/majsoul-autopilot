@@ -15,10 +15,8 @@ from autoplay.protocol_automation import (
     RESOURCE_VERSION,
     _auth_game_body,
     _client_version_string,
-    _public_route_ips_from_dns_answer,
     _format_error,
     _route_change_body,
-    _route_dns_cache,
     _route_tcp_attempts,
     _route_ws_url,
     _select_riichi_declaration_tile,
@@ -32,14 +30,14 @@ from mitm.bridge.majsoul.bridge import (
     get_last_operation_list,
 )
 from run_autoplay import (
+    ProtocolMessageClient,
     SessionResult,
-    _cleanup_existing_majsoul_clients,
     _login_failure_session_result,
     _resolve_riichi_discard,
     run_session,
     _session_restart_delay,
 )
-from settings.settings import settings
+from settings.settings import get_schema, get_settings, settings, verify_settings
 
 
 class FakeLobby:
@@ -191,15 +189,12 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertEqual(sends[0]["tile"], "0m")
 
-    def test_known_route_tcp_attempts_skip_external_dns_probe(self):
-        _route_dns_cache.clear()
-
+    def test_route_tcp_attempts_use_system_dns_only(self):
         with patch("autoplay.protocol_automation.urllib.request.urlopen") as urlopen:
             attempts = _route_tcp_attempts("wss://route-2.maj-soul.com:443/game-gateway-zone")
 
         urlopen.assert_not_called()
-        self.assertEqual(attempts[0], (None, None))
-        self.assertIn(("170.33.12.14", 443), attempts)
+        self.assertEqual(attempts, [(None, None)])
 
     async def test_execute_action_returns_false_when_input_operation_fails(self):
         automation = MajsoulAutomation()
@@ -1334,21 +1329,15 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         autoplay_runner.running = self.old_running
 
-    async def test_run_session_cleans_browser_clients_before_protocol_login(self):
+    async def test_run_session_initializes_protocol_before_login(self):
         events = []
 
         class FakeAutomation:
             def __init__(self, *args, **kwargs):
                 events.append("automation-init")
 
-            async def start_browser(self, proxy_port=None):
-                events.append("start-browser")
-
-            async def navigate_to_game(self):
-                events.append("navigate")
-
-            async def wait_for_entrance(self):
-                events.append("wait-entrance")
+            async def initialize(self):
+                events.append("initialize")
                 return False
 
             async def close(self):
@@ -1361,23 +1350,23 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
         class FakeBot:
             player_id = 0
 
-        mitm_client = SimpleNamespace(
+        message_client = SimpleNamespace(
             messages=None,
             ws_disconnected=threading.Event(),
         )
 
         with (
-            patch("run_autoplay._cleanup_existing_majsoul_clients", lambda: events.append("cleanup")),
             patch("run_autoplay.MajsoulAutomation", FakeAutomation),
             patch("run_autoplay.Controller", lambda: object()),
             patch("run_autoplay.AkagiBot", FakeBot),
             patch("run_autoplay.JsonlLogger", FakeJsonlLogger),
             patch("run_autoplay.process_messages", lambda *args, **kwargs: None),
         ):
-            result = await run_session(0, mitm_client)
+            result = await run_session(0, message_client)
 
         self.assertEqual(result, SessionResult(0))
-        self.assertLess(events.index("cleanup"), events.index("start-browser"))
+        self.assertEqual(events[0], "automation-init")
+        self.assertIn("initialize", events)
 
     async def test_run_session_does_not_count_recovered_action_failure_as_completed_game(self):
         events = []
@@ -1387,13 +1376,7 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self, *args, **kwargs):
                 events.append("automation-init")
 
-            async def start_browser(self, proxy_port=None):
-                pass
-
-            async def navigate_to_game(self):
-                pass
-
-            async def wait_for_entrance(self):
+            async def initialize(self):
                 return True
 
             async def login(self, username, password):
@@ -1433,48 +1416,41 @@ class SessionStartupTests(unittest.IsolatedAsyncioTestCase):
                     "tsumogiri": True,
                 }
 
-        mitm_client = SimpleNamespace(
+        message_client = SimpleNamespace(
             messages=None,
             ws_disconnected=threading.Event(),
         )
 
         with (
-            patch("run_autoplay._cleanup_existing_majsoul_clients", lambda: events.append("cleanup")),
             patch("run_autoplay.MajsoulAutomation", FakeAutomation),
             patch("run_autoplay.Controller", lambda: object()),
             patch("run_autoplay.AkagiBot", FakeBot),
             patch("run_autoplay.JsonlLogger", FakeJsonlLogger),
             patch("run_autoplay.game_loop", fake_game_loop),
         ):
-            result = await run_session(0, mitm_client)
+            result = await run_session(0, message_client)
 
         self.assertEqual(result, SessionResult(0))
         self.assertIn("recover", events)
         self.assertNotIn("handle_end_game", events)
 
 
-class BrowserCleanupTests(unittest.TestCase):
-    def test_cleanup_closes_majsoul_tabs_and_stale_playwright_chromium(self):
-        calls = []
+class ProtocolMessageClientTests(unittest.TestCase):
+    def test_protocol_message_client_drains_in_process_queue(self):
+        client = ProtocolMessageClient()
+        client.start()
+        client.messages.put({"type": "start_game", "id": 0})
+        client.messages.put({"type": "end_game"})
 
-        def fake_run(args, **kwargs):
-            calls.append((args, kwargs))
-            return None
+        self.assertTrue(client.running)
+        self.assertEqual(
+            client.dump_messages(),
+            [{"type": "start_game", "id": 0}, {"type": "end_game"}],
+        )
+        self.assertEqual(client.dump_messages(), [])
 
-        with patch("run_autoplay.subprocess.run", fake_run):
-            _cleanup_existing_majsoul_clients()
-
-        self.assertEqual(len(calls), 2)
-        osascript_args = calls[0][0]
-        self.assertEqual(osascript_args[:2], ["osascript", "-e"])
-        self.assertIn("game.maj-soul.com", osascript_args[2])
-        self.assertIn("Google Chrome", osascript_args[2])
-        self.assertIn("Chromium", osascript_args[2])
-
-        pkill_args = calls[1][0]
-        self.assertEqual(pkill_args[:2], ["pkill", "-f"])
-        self.assertIn("ms-playwright", pkill_args[2])
-        self.assertIn("Chromium", pkill_args[2])
+        client.stop()
+        self.assertFalse(client.running)
 
 
 class ProtocolConstantTests(unittest.TestCase):
@@ -1482,6 +1458,25 @@ class ProtocolConstantTests(unittest.TestCase):
         self.assertEqual(RESOURCE_VERSION, "0.16.229")
         self.assertEqual(PACKAGE_VERSION, "4.0.44")
         self.assertEqual(CLIENT_VERSION_STRING, "WebGL_2022-0.16.229")
+
+
+class MinimalSettingsTests(unittest.TestCase):
+    def test_settings_expose_only_four_player_runtime_fields(self):
+        self.assertEqual(
+            sorted(get_settings().keys()),
+            ["autoplay_account", "autoplay_mode", "autoplay_time", "model_path"],
+        )
+
+    def test_schema_rejects_three_player_modes(self):
+        mode_type_schema = get_schema()["properties"]["autoplay_mode"]["properties"]["type"]
+
+        self.assertEqual(mode_type_schema["enum"], ["4p_south", "4p_east"])
+        self.assertFalse(verify_settings({
+            "model_path": "mjai_bot/mortal/mortal.pth",
+            "autoplay_account": {"username": "u", "password": "p"},
+            "autoplay_mode": {"type": "3p_east", "room": "bronze"},
+            "autoplay_time": {"rand_min": 1.0, "rand_max": 3.0},
+        }))
 
     def test_client_version_string_strips_resource_suffix(self):
         self.assertEqual(_client_version_string("0.12.345.w"), "WebGL_2022-0.12.345")
@@ -1577,32 +1572,6 @@ class ProtocolConstantTests(unittest.TestCase):
             automation._game_route_candidates(location="zone", preferred="route-6"),
             ["route-6", "route-4"],
         )
-
-    def test_public_route_dns_answer_filters_fake_ips_and_cnames(self):
-        answer = {
-            "Answer": [
-                {"type": 5, "data": "route-4.maj-soul.com.w.kunlungr.com."},
-                {"type": 1, "data": "198.18.0.35"},
-                {"type": 1, "data": "155.102.209.208"},
-                {"type": 1, "data": "155.102.209.204"},
-            ],
-        }
-
-        self.assertEqual(
-            _public_route_ips_from_dns_answer(answer),
-            ["155.102.209.208", "155.102.209.204"],
-        )
-
-    def test_route_tcp_attempts_try_system_dns_before_public_ip_fallback(self):
-        with patch(
-            "autoplay.protocol_automation._resolve_public_route_ips",
-            return_value=["170.33.12.14"],
-        ):
-            self.assertEqual(
-                _route_tcp_attempts("wss://route-2.maj-soul.com:443/gateway"),
-                [(None, None), ("170.33.12.14", 443)],
-            )
-
 
 class ErrorFormattingTests(unittest.TestCase):
     def test_format_error_includes_structured_params(self):

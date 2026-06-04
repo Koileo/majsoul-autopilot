@@ -2,16 +2,16 @@ import traceback
 from .logger import logger
 
 
-def process_messages(mitm_client, mjai_controller, mjai_bot, jsonl_logger=None):
-    """Process MJAI messages from mitm_client, run inference, write logs.
+def process_messages(message_client, mjai_controller, mjai_bot, jsonl_logger=None):
+    """Process MJAI messages from message_client, run inference, write logs.
 
     Returns:
         dict with keys: mjai_msgs, mjai_response, or None if no messages.
     """
-    if not mitm_client.running:
+    if not message_client.running:
         return None
 
-    mjai_msgs = mitm_client.dump_messages()
+    mjai_msgs = message_client.dump_messages()
     if not mjai_msgs:
         return None
 
@@ -26,7 +26,7 @@ def process_messages(mitm_client, mjai_controller, mjai_bot, jsonl_logger=None):
         mjai_bot.react(input_list=mjai_msgs)
 
         if jsonl_logger:
-            jsonl_logger.write_inference(mjai_response, mjai_bot.tehai_mjai, mjai_bot.is_3p)
+            jsonl_logger.write_inference(mjai_response, mjai_bot.tehai_mjai)
 
         return {
             "mjai_msgs": mjai_msgs,
