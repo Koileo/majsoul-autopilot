@@ -3,6 +3,7 @@ use futures_util::{SinkExt, StreamExt};
 use http::header::{ACCEPT_LANGUAGE, ORIGIN, REFERER, USER_AGENT};
 use liqi::codec::{pack_raw_request, pack_request, response_body};
 use prost::Message;
+use std::collections::VecDeque;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     connect_async,
@@ -17,6 +18,7 @@ type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 pub struct LiqiSocket {
     ws: Ws,
     next_msg_id: u16,
+    pending_frames: VecDeque<Vec<u8>>,
 }
 
 impl LiqiSocket {
@@ -34,7 +36,11 @@ impl LiqiSocket {
         let (ws, _) = connect_async(request)
             .await
             .with_context(|| format!("websocket connect failed: {url}"))?;
-        Ok(Self { ws, next_msg_id: 1 })
+        Ok(Self {
+            ws,
+            next_msg_id: 1,
+            pending_frames: VecDeque::new(),
+        })
     }
 
     pub async fn request_raw(&mut self, method: &str, body: &[u8]) -> Result<Vec<u8>> {
@@ -58,6 +64,9 @@ impl LiqiSocket {
     }
 
     pub async fn next_binary_frame(&mut self) -> Result<Vec<u8>> {
+        if let Some(bytes) = self.pending_frames.pop_front() {
+            return Ok(bytes);
+        }
         self.read_binary_frame().await
     }
 
@@ -70,6 +79,7 @@ impl LiqiSocket {
                     return Ok(bytes);
                 }
             }
+            self.pending_frames.push_back(bytes);
         }
     }
 
@@ -100,5 +110,38 @@ impl LiqiSocket {
             self.next_msg_id + 1
         };
         msg_id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::net::TcpListener;
+
+    #[tokio::test]
+    async fn request_raw_buffers_notify_frames_that_arrive_before_response() -> Result<()> {
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let request = ws.next().await.unwrap().unwrap();
+            assert!(matches!(request, WsMessage::Binary(_)));
+
+            let notify = vec![0x01, 0xaa, 0xbb, 0xcc];
+            ws.send(WsMessage::Binary(notify.clone().into()))
+                .await
+                .unwrap();
+            ws.send(WsMessage::Binary(vec![0x03, 0x01, 0x00].into()))
+                .await
+                .unwrap();
+            notify
+        });
+
+        let mut socket = LiqiSocket::connect(&format!("ws://{addr}/gateway")).await?;
+        let response = socket.request_raw(".lq.Test.echo", b"\x08\x01").await?;
+        assert_eq!(response, vec![0x03, 0x01, 0x00]);
+        assert_eq!(socket.next_binary_frame().await?, server.await?);
+        Ok(())
     }
 }
