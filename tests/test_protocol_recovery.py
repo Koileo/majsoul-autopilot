@@ -12,6 +12,7 @@ from majsoul.client import (
     _target_mode_for_rank_level,
 )
 from majsoul.protocol import MsgType, fromProtobuf
+from mjai_bot.bot import MjaiStateTracker
 from run_autoplay import _resolve_riichi_discard
 from settings.settings import get_schema, verify_settings
 
@@ -230,6 +231,39 @@ class MiniProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(payload["password"], "test-password")
         self.assertTrue(reconnect_payload["reconnect"])
         self.assertNotIn("genAccessToken", reconnect_payload)
+
+    def test_state_tracker_handles_mjai_honor_tiles_without_native_state(self):
+        tracker = MjaiStateTracker()
+        events = [
+            {"type": "start_game", "id": 1},
+            {
+                "type": "start_kyoku",
+                "bakaze": "E",
+                "dora_marker": "7p",
+                "honba": 0,
+                "kyoku": 1,
+                "kyotaku": 0,
+                "oya": 0,
+                "scores": [25000, 25000, 25000, 25000],
+                "tehais": [
+                    ["?"] * 13,
+                    ["2m", "2m", "3m", "6m", "6m", "1p", "4p", "7p", "7s", "S", "W", "P", "P"],
+                    ["?"] * 13,
+                    ["?"] * 13,
+                ],
+            },
+            {"type": "tsumo", "actor": 1, "pai": "W"},
+            {"type": "dahai", "actor": 1, "pai": "P", "tsumogiri": False},
+        ]
+
+        for event in events:
+            result = tracker.react(input_list=[event])
+            self.assertEqual(result, '{"type":"none","can_act":false}')
+
+        self.assertEqual(tracker.player_id, 1)
+        self.assertEqual(tracker.last_self_tsumo, "W")
+        self.assertEqual(tracker.tehai_mjai.count("P"), 1)
+        self.assertIn("W", tracker.tehai_mjai)
 
 
 if __name__ == "__main__":

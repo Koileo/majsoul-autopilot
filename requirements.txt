@@ -1,5 +1,4 @@
-# Core MJAI / runtime
-mjai==0.2.1
+# Core runtime
 loguru==0.7.3
 jsonschema==4.23.0
 websockets==12.0

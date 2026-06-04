@@ -1,22 +1,18 @@
 import json
-from mjai import Bot
-from mjai.mlibriichi.state import PlayerState  # type: ignore
 from .logger import logger
 
-class MjaiStateTracker(Bot):
-    """Track MJAI game state so the runner can inspect seat/hand details."""
-    def __init__(self):
-        super().__init__()
 
-    def think(self) -> str:
-        """
-        tsumogiri
-        """
-        if self.can_discard:
-            tile_str = self.last_self_tsumo
-            return self.action_discard(tile_str)
-        else:
-            return self.action_nothing()
+class MjaiStateTracker:
+    """Track MJAI game state so the runner can inspect seat/hand details."""
+
+    def __init__(self):
+        self.player_id: int = 0
+        self.tehai_mjai: list[str] = []
+        self.last_self_tsumo: str | None = None
+
+    @staticmethod
+    def _none() -> str:
+        return json.dumps({"type": "none", "can_act": False}, separators=(",", ":"))
 
     def react(self, input_str: str = None, input_list: list[dict] = None) -> str:
         try:
@@ -29,27 +25,58 @@ class MjaiStateTracker(Bot):
             if len(events) == 0:
                 raise ValueError("Empty events")
             for event in events:
-                if event["type"] == "start_game":
-                    self.player_id = event["id"]
-                    self.player_state = PlayerState(self.player_id)
                 logger.debug(f"Event: {event}")
-                self.player_state.update(json.dumps(event))
-
-            # NOTE: Skip `think()` if the player's riichi is accepted and
-            # no call actions are allowed.
-            if (
-                self.self_riichi_accepted
-                and not (self.can_agari or self.can_kakan or self.can_ankan)
-                and self.can_discard
-            ):
-                return self.action_discard(self.last_self_tsumo)
-
-            resp = self.think()
-            return resp
+                self._apply_event(event)
 
         except Exception as e:
-            logger.error(f"Exception: {str(e)}")
-            logger.error("Brief info:")
-            logger.error(self.brief_info())
+            logger.warning(f"State tracker ignored event: {type(e).__name__}: {e!r}")
 
-        return json.dumps({"type": "none"}, separators=(",", ":"))
+        return self._none()
+
+    def _apply_event(self, event: dict) -> None:
+        event_type = event.get("type")
+        if event_type == "start_game":
+            self.player_id = int(event.get("id") or 0)
+            self.tehai_mjai = []
+            self.last_self_tsumo = None
+            return
+
+        if event_type == "start_kyoku":
+            tehais = event.get("tehais") or []
+            if 0 <= self.player_id < len(tehais):
+                self.tehai_mjai = list(tehais[self.player_id])
+            self.last_self_tsumo = None
+            return
+
+        actor = event.get("actor")
+        if actor != self.player_id:
+            return
+
+        if event_type == "tsumo":
+            pai = event.get("pai")
+            if pai and pai != "?":
+                self.tehai_mjai.append(pai)
+                self.last_self_tsumo = pai
+            return
+
+        if event_type == "dahai":
+            self._remove_tile(event.get("pai"))
+            if event.get("pai") == self.last_self_tsumo:
+                self.last_self_tsumo = None
+            return
+
+        if event_type in {"chi", "pon", "daiminkan", "ankan"}:
+            for tile in event.get("consumed") or []:
+                self._remove_tile(tile)
+            return
+
+        if event_type == "kakan":
+            self._remove_tile(event.get("pai"))
+
+    def _remove_tile(self, tile: str | None) -> None:
+        if not tile:
+            return
+        try:
+            self.tehai_mjai.remove(tile)
+        except ValueError:
+            logger.debug(f"State tracker tile not in hand: {tile}")
