@@ -1,11 +1,8 @@
-import json
-import gzip
 import platform
 import shutil
 import sys
 import torch
 import pathlib
-import requests
 import traceback
 import numpy as np
 
@@ -47,25 +44,6 @@ _ensure_libriichi_extension()
 from .libriichi.mjai import Bot
 from .libriichi.consts import obs_shape, oracle_obs_shape, ACTION_SPACE, GRP_SIZE
 from .logger import logger
-
-# ========== Online Server =========== #
-OT_REQUEST_TIMEOUT = 2
-ot_settings = {
-    "server": "http://example.com",
-    "online": False,
-    "api_key": "example_api_key",
-}
-is_online = False
-
-def online_settings_init():
-    global ot_settings
-    # Check if the file exists
-    if (pathlib.Path(__file__).parent / 'ot_settings.json').exists():
-        with open(pathlib.Path(__file__).parent / 'ot_settings.json', 'r') as f:
-            ot_settings = json.load(f)
-
-online_settings_init()
-# ==================================== #
 
 class ChannelAttention(nn.Module):
     def __init__(self, channels, ratio=16, actv_builder=nn.ReLU, bias=True):
@@ -327,36 +305,6 @@ class MortalEngine:
         self.top_p = top_p
 
     def react_batch(self, obs, masks, invisible_obs):
-        # ========== Online Server =========== #
-        global ot_settings, is_online
-        if ot_settings['online']:
-            try:
-                list_obs = [o.tolist() for o in obs]
-                list_masks = [m.tolist() for m in masks]
-                post_data = {
-                    'obs': list_obs,
-                    'masks': list_masks,
-                }
-                data = json.dumps(post_data, separators=(',', ':'))
-                compressed_data = gzip.compress(data.encode('utf-8'))
-                headers = {
-                    'Authorization': ot_settings['api_key'],
-                    'Content-Encoding': 'gzip',
-                }
-                r = requests.post(
-                    f'{ot_settings["server"]}/react_batch',
-                    headers=headers,
-                    data=compressed_data,
-                    timeout=OT_REQUEST_TIMEOUT
-                )
-                assert r.status_code == 200
-                is_online = True
-                r_json = r.json()
-                return r_json['actions'], r_json['q_out'], r_json['masks'], r_json['is_greedy']
-            except:
-                is_online = False
-                pass
-        # ==================================== #
         try:
             with (
                 torch.autocast(self.device.type, enabled=self.enable_amp),

@@ -1,26 +1,15 @@
-"""Majsoul autoplay via the Liqi WebSocket protocol.
-
-The current Majsoul web client is Unity WebGL. The old Laya globals
-(`uiscript`, `app.NetAgent`, `GameMgr`) no longer exist, so browser-side JS
-runtime calls cannot drive login/matching/actions anymore. This module keeps
-the original bot pipeline, but talks to the server directly with the same
-protobuf protocol the client uses.
-"""
+"""Four-player Majsoul autoplay via the Liqi WebSocket protocol."""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import hmac
-import json
 import queue
 import random
 import ssl
 import struct
 import time
-import urllib.parse
-import urllib.request
-from urllib.parse import urlparse
 import uuid
 from typing import Any, Callable, Literal
 
@@ -39,19 +28,17 @@ from settings.settings import settings
 from .logger import logger
 
 
-MAJSOUL_ROUTE_ID = "route-2"
-MAJSOUL_LOBBY_ROUTE_CANDIDATES = ("route-2", "route-3", "route-4", "route-5", "route-6")
-MAJSOUL_GAME_ROUTE_ID = MAJSOUL_ROUTE_ID
-MAJSOUL_GAME_ROUTE_CANDIDATES = ("route-6", "route-5", "route-4", "route-3", "route-2")
-MAJSOUL_PREP_ROUTE_CANDIDATES = ("route-6", "route-5", "route-4", "route-3", "route-2")
-MAJSOUL_VERSION_URL = "https://game.maj-soul.com/1/version.json"
-MAJSOUL_CONFIG_URL_TEMPLATE = "https://game.maj-soul.com/1/v{version}/config.json"
-MAJSOUL_CLIENTGATE_ROUTES_PATH = "/api/clientgate/routes"
+DEFAULT_ROUTE_ID = "route-2"
+LOBBY_ROUTE_IDS = ("route-2", "route-3", "route-4", "route-5", "route-6")
+GAME_ROUTE_IDS = ("route-6", "route-5", "route-4", "route-3", "route-2")
+PREP_ROUTE_IDS = GAME_ROUTE_IDS
 RESOURCE_VERSION = "0.16.229"
 PACKAGE_VERSION = "4.0.44"
 CLIENT_VERSION_STRING = f"WebGL_2022-{RESOURCE_VERSION.removesuffix('.w')}"
 LOGIN_BEAT_CONTRACT = "DF2vkXCnfeXp4WoGrBGNcJBufZiMN3uP"
 SERVER_COOLDOWN_ERROR_CODE = 503
+ACTION_DELAY_MIN = 1.0
+ACTION_DELAY_MAX = 3.0
 
 StartMatchResult = Literal["queued", "busy", "error"]
 
@@ -60,158 +47,6 @@ UA = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
-
-def _client_version_string(resource_version: str) -> str:
-    return f"WebGL_2022-{resource_version.removesuffix('.w')}"
-
-
-def _fetch_json(url: str, timeout: float = 8) -> Any:
-    request = urllib.request.Request(
-        url,
-        headers={"Cache-Control": "no-cache", "User-Agent": UA},
-    )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
-
-
-def _fetch_current_resource_version(timeout: float = 8) -> str | None:
-    try:
-        payload = _fetch_json(MAJSOUL_VERSION_URL, timeout=timeout)
-        version = str(payload.get("version") or "").strip()
-        return version or None
-    except Exception as exc:
-        logger.warning(f"Failed to fetch Majsoul version.json: {exc!r}")
-        return None
-
-
-def _default_route_entries() -> list[dict[str, Any]]:
-    return [
-        {
-            "id": route_id,
-            "domain": f"{route_id}.maj-soul.com:{8443 if route_id == 'route-3' else 443}",
-            "ssl": True,
-            "state": "idle",
-            "order": index,
-        }
-        for index, route_id in enumerate(MAJSOUL_LOBBY_ROUTE_CANDIDATES, start=2)
-    ]
-
-
-def _route_entry_from_url(route_id: str, url: str, *, order: int = 0) -> dict[str, Any] | None:
-    parsed = urlparse(url)
-    if not parsed.hostname:
-        return None
-    ssl_enabled = parsed.scheme != "http"
-    port = parsed.port or (443 if ssl_enabled else 80)
-    return {
-        "id": route_id,
-        "domain": f"{parsed.hostname}:{port}",
-        "ssl": ssl_enabled,
-        "state": "idle",
-        "order": order,
-    }
-
-
-def _normalize_route_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
-    for index, entry in enumerate(entries):
-        route_id = str(entry.get("id") or "").strip()
-        if not route_id:
-            continue
-
-        state = str(entry.get("state") or "idle").strip().lower()
-        if state and state != "idle":
-            continue
-
-        ssl_enabled = bool(entry.get("ssl", True))
-        domain = str(entry.get("domain") or "").strip().rstrip("/")
-        if "://" in domain:
-            parsed = urlparse(domain)
-            if not parsed.hostname:
-                continue
-            ssl_enabled = parsed.scheme != "http"
-            domain = f"{parsed.hostname}:{parsed.port or (443 if ssl_enabled else 80)}"
-        elif not domain:
-            from_url = _route_entry_from_url(route_id, str(entry.get("url") or ""), order=index)
-            if not from_url:
-                continue
-            normalized.append(from_url)
-            continue
-        elif "/" in domain:
-            domain = domain.split("/", 1)[0]
-
-        if ":" not in domain:
-            domain = f"{domain}:{443 if ssl_enabled else 80}"
-        try:
-            order = int(entry.get("order") if entry.get("order") is not None else index)
-        except (TypeError, ValueError):
-            order = index
-
-        normalized.append(
-            {
-                "id": route_id,
-                "domain": domain,
-                "ssl": ssl_enabled,
-                "state": "idle",
-                "order": order,
-            }
-        )
-
-    normalized.sort(key=lambda item: (int(item.get("order") or 0), str(item.get("id") or "")))
-    deduped: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for entry in normalized:
-        route_id = str(entry.get("id") or "")
-        if route_id in seen:
-            continue
-        seen.add(route_id)
-        deduped.append(entry)
-    return deduped
-
-
-def _route_ws_url_from_entry(entry: dict[str, Any], tail: str = "gateway") -> str:
-    scheme = "wss" if entry.get("ssl", True) else "ws"
-    domain = str(entry["domain"]).rstrip("/")
-    return f"{scheme}://{domain}/{tail.strip('/')}"
-
-
-def _fetch_config_route_entries(resource_version: str, timeout: float = 8) -> list[dict[str, Any]]:
-    url = MAJSOUL_CONFIG_URL_TEMPLATE.format(version=resource_version)
-    payload = _fetch_json(url, timeout=timeout)
-    for group in payload.get("ip") or []:
-        gateways = group.get("gateways") or []
-        if group.get("name") == "player":
-            return _normalize_route_entries(gateways)
-    groups = payload.get("ip") or []
-    if groups:
-        return _normalize_route_entries(groups[0].get("gateways") or [])
-    return []
-
-
-def _clientgate_routes_url(entry: dict[str, Any], resource_version: str) -> str:
-    scheme = "https" if entry.get("ssl", True) else "http"
-    query = urllib.parse.urlencode({"platform": "Web", "version": resource_version})
-    return f"{scheme}://{entry['domain']}{MAJSOUL_CLIENTGATE_ROUTES_PATH}?{query}"
-
-
-def _fetch_clientgate_route_entries(
-    seed_entries: list[dict[str, Any]],
-    resource_version: str,
-    timeout: float = 8,
-) -> list[dict[str, Any]]:
-    errors: list[str] = []
-    for entry in seed_entries:
-        try:
-            payload = _fetch_json(_clientgate_routes_url(entry, resource_version), timeout=timeout)
-            routes = ((payload.get("data") or {}).get("routes") or [])
-            normalized = _normalize_route_entries(routes)
-            if normalized:
-                return normalized
-        except Exception as exc:
-            errors.append(f"{entry.get('id', '?')}: {exc!r}")
-    if errors:
-        logger.warning(f"clientgate routes fetch failed: {'; '.join(errors)}")
-    return []
 
 # Match mode IDs from cfg.desktop.matchmode.
 MATCH_MODE_IDS = {
@@ -316,7 +151,7 @@ OPENING_ROUND_DISCARD_MIN_DELAY = 12.0
 STALE_SELF_DISCARD_IGNORE_WINDOW = 5.0
 
 
-def _route_body(kind: int, route_id: str = MAJSOUL_ROUTE_ID) -> bytes:
+def _route_body(kind: int, route_id: str = DEFAULT_ROUTE_ID) -> bytes:
     return toProtobuf(
         [
             {"id": 2, "type": "varint", "data": kind},
@@ -346,17 +181,6 @@ def _game_gateway_tail(location: str) -> str:
     return "game-gateway" if location == "local" else "game-gateway-zone"
 
 
-def _endpoint_ws_url(endpoint: dict[str, Any]) -> str | None:
-    address = str(endpoint.get("address") or "").strip()
-    try:
-        port = int(endpoint.get("port") or 0)
-    except (TypeError, ValueError):
-        port = 0
-    if not address or not port:
-        return None
-    return f"wss://{address}:{port}/gateway"
-
-
 def _prepare_login_body(access_token: str) -> bytes:
     return toProtobuf(
         [
@@ -364,17 +188,6 @@ def _prepare_login_body(access_token: str) -> bytes:
             {"id": 2, "type": "varint", "data": 0},
         ]
     )
-
-
-def _route_change_body(from_route_id: str, to_route_id: str, change_type: int = 2) -> bytes:
-    return toProtobuf(
-        [
-            {"id": 1, "type": "string", "data": from_route_id.encode()},
-            {"id": 2, "type": "string", "data": to_route_id.encode()},
-            {"id": 3, "type": "varint", "data": change_type},
-        ]
-    )
-
 
 def _auth_game_body(account_id: int, token: str, game_uuid: str) -> bytes:
     return toProtobuf(
@@ -657,11 +470,12 @@ class MajsoulAutomation:
         self.account_cooldown_until: int | None = None
         self.existing_game_info: dict[str, Any] | None = None
         self.login_reconnect = False
-        self.lobby_route_id = MAJSOUL_ROUTE_ID
+        self.lobby_route_id = DEFAULT_ROUTE_ID
         self.route_prep_route_id: str | None = None
-        self.route_entries = _default_route_entries()
         self.rank_level_id: int | None = None
         self.rank_score: int | None = None
+        self.target_mode = "4p_east"
+        self.target_room = "bronze"
 
     def _should_continue(self) -> bool:
         try:
@@ -671,8 +485,10 @@ class MajsoulAutomation:
 
     async def login(self, username: str, password: str, *, reconnect: bool = False):
         logger.info(f"Logging in as {username} via Liqi protocol...")
-        await self._refresh_client_version()
-        await self._refresh_route_entries()
+        logger.info(
+            f"Majsoul web version: resource={self.resource_version} "
+            f"package={self.package_version} client={self.client_version_string}"
+        )
         previous_access_token = self.access_token
         self.account_busy = False
         self.account_cooldown_until = None
@@ -751,12 +567,9 @@ class MajsoulAutomation:
         self.rank_score = score
 
         target_type, target_room = _target_mode_for_rank_level(level_id)
-        changed = (
-            settings.autoplay_mode.type != target_type
-            or settings.autoplay_mode.room != target_room
-        )
-        settings.autoplay_mode.type = target_type
-        settings.autoplay_mode.room = target_room
+        changed = self.target_mode != target_type or self.target_room != target_room
+        self.target_mode = target_type
+        self.target_room = target_room
 
         verb = "updated" if changed else "confirmed"
         logger.info(
@@ -816,7 +629,7 @@ class MajsoulAutomation:
         return False
 
     def _lobby_ws_url_candidates(self) -> list[str]:
-        return [_route_ws_url_from_entry(entry) for entry in self.route_entries]
+        return [_route_ws_url(route_id) for route_id in LOBBY_ROUTE_IDS]
 
     async def wait_for_lobby(self, timeout: float = 120):
         if not self.lobby:
@@ -856,7 +669,7 @@ class MajsoulAutomation:
         await self.refresh_rank_target(quiet=True)
         match_sid = self._get_match_sid()
         if not match_sid:
-            logger.error(f"Unknown match mode: {settings.autoplay_mode.type} {settings.autoplay_mode.room}")
+            logger.error(f"Unknown match mode: {self.target_mode} {self.target_room}")
             return "error"
 
         if await self._refresh_existing_game_info(quiet=True):
@@ -868,8 +681,8 @@ class MajsoulAutomation:
             return "error"
 
         logger.info(
-            f"Starting match: {settings.autoplay_mode.type} "
-            f"{settings.autoplay_mode.room} (match_sid={match_sid})"
+            f"Starting match: {self.target_mode} "
+            f"{self.target_room} (match_sid={match_sid})"
         )
         start_match_payload = {
             "match_sid": match_sid,
@@ -986,8 +799,8 @@ class MajsoulAutomation:
             return await self._send_skip()
 
         delay = random.uniform(
-            settings.autoplay_time.rand_min,
-            settings.autoplay_time.rand_max,
+            ACTION_DELAY_MIN,
+            ACTION_DELAY_MAX,
         )
         await asyncio.sleep(delay)
 
@@ -1184,57 +997,6 @@ class MajsoulAutomation:
         )
         return True
 
-    async def _refresh_client_version(self):
-        latest = await asyncio.to_thread(_fetch_current_resource_version)
-        if latest and latest.endswith(".w") and not self.resource_version.endswith(".w"):
-            logger.info(
-                f"Ignoring legacy Majsoul version.json resource={latest}; "
-                f"using Unity resource={self.resource_version}"
-            )
-        elif latest:
-            self.resource_version = latest
-            self.client_version_string = _client_version_string(latest)
-        logger.info(
-            f"Majsoul web version: resource={self.resource_version} "
-            f"package={self.package_version} client={self.client_version_string}"
-        )
-
-    async def _refresh_route_entries(self):
-        config_entries = []
-        if self.resource_version.endswith(".w"):
-            try:
-                config_entries = await asyncio.to_thread(
-                    _fetch_config_route_entries,
-                    self.resource_version,
-                )
-            except Exception as exc:
-                logger.warning(f"Failed to fetch Majsoul route config: {exc!r}")
-
-        if config_entries:
-            self.route_entries = config_entries
-
-        clientgate_entries = await asyncio.to_thread(
-            _fetch_clientgate_route_entries,
-            self.route_entries,
-            self.resource_version,
-        )
-        if clientgate_entries:
-            self.route_entries = clientgate_entries
-
-        logger.info(
-            "Majsoul routes: "
-            + ", ".join(
-                f"{entry['id']}={entry['domain']}"
-                for entry in self.route_entries
-            )
-        )
-
-    def _route_ws_url_for_id(self, route_id: str, tail: str = "gateway") -> str:
-        for entry in self.route_entries:
-            if entry.get("id") == route_id:
-                return _route_ws_url_from_entry(entry, tail=tail)
-        return _route_ws_url(route_id, tail=tail)
-
     async def reconnect_existing_game(self) -> bool:
         await self._refresh_existing_game_info()
         info = self.existing_game_info or {}
@@ -1258,7 +1020,7 @@ class MajsoulAutomation:
             if not self._should_continue():
                 logger.info("Existing game reconnect aborted by shutdown")
                 return False
-            ws_url = self._route_ws_url_for_id(route_id, tail=tail)
+            ws_url = _route_ws_url(route_id, tail=tail)
             for request_route_id in self._request_route_candidates(route_id):
                 if not self._should_continue():
                     logger.info("Existing game reconnect aborted by shutdown")
@@ -1332,7 +1094,7 @@ class MajsoulAutomation:
         }
 
     def _get_match_sid(self) -> str | None:
-        mode_id = MATCH_MODE_IDS.get((settings.autoplay_mode.type, settings.autoplay_mode.room))
+        mode_id = MATCH_MODE_IDS.get((self.target_mode, self.target_room))
         return f"1:{mode_id}" if mode_id is not None else None
 
     def _start_heartbeat(self, sock: LiqiSocket):
@@ -1413,7 +1175,7 @@ class MajsoulAutomation:
                 self.in_game = False
                 self.matching = False
                 return
-            ws_url = self._route_ws_url_for_id(route_id, tail=tail)
+            ws_url = _route_ws_url(route_id, tail=tail)
             for request_route_id in self._request_route_candidates(route_id):
                 if not self._should_continue():
                     logger.info("Game connection aborted by shutdown")
@@ -1607,7 +1369,6 @@ class MajsoulAutomation:
         target_route_id: str | None = None,
         *,
         force: bool = False,
-        change_route: bool = False,
     ) -> bool:
         if (
             not force
@@ -1623,23 +1384,9 @@ class MajsoulAutomation:
             await self.route_prep.close()
             self.route_prep = None
             self.route_prep_route_id = None
-        client_endpoint_url = None
-        if self.lobby:
-            try:
-                info = await self.lobby.request(".lq.Lobby.fetchConnectionInfo", {}, timeout=10)
-                endpoint = (info.get("data") or {}).get("clientEndpoint") or {}
-                if endpoint:
-                    logger.info(
-                        "Fetched client endpoint "
-                        f"{endpoint.get('address', '?')}:{endpoint.get('port', '?')}"
-                    )
-                    client_endpoint_url = _endpoint_ws_url(endpoint)
-            except Exception as exc:
-                logger.warning(f"fetchConnectionInfo failed/skipped: {exc!r}")
 
         route_candidates: list[str] = []
-        dynamic_route_ids = [str(entry.get("id") or "") for entry in self.route_entries]
-        for route_id in (target_route_id, *MAJSOUL_PREP_ROUTE_CANDIDATES, *dynamic_route_ids):
+        for route_id in (target_route_id, *PREP_ROUTE_IDS):
             if not route_id or route_id in route_candidates:
                 continue
             route_candidates.append(route_id)
@@ -1648,54 +1395,34 @@ class MajsoulAutomation:
             if not self._should_continue():
                 logger.info("Route prepareLogin aborted by shutdown")
                 return False
-            socket_urls: list[tuple[str, float]] = []
-            if client_endpoint_url:
-                socket_urls.append((client_endpoint_url, 3))
-            route_url = self._route_ws_url_for_id(route_id)
-            if route_url not in [url for url, _ in socket_urls]:
-                socket_urls.append((route_url, 12))
-            for socket_url, open_timeout in socket_urls:
-                if not self._should_continue():
-                    logger.info("Route prepareLogin aborted by shutdown")
-                    return False
-                sock = LiqiSocket("route-prep", socket_url)
-                try:
-                    await sock.connect(open_timeout=open_timeout)
-                    kind = 3 if change_route and target_route_id else 2
-                    await sock.raw_request(
-                        ".lq.Route.requestConnection",
-                        _route_body(kind, route_id),
-                        timeout=10,
-                    )
-                    if change_route and target_route_id:
-                        await sock.raw_request(
-                            ".lq.Route.requestRouteChange",
-                            _route_change_body(self.lobby_route_id, route_id),
-                            timeout=10,
-                        )
-                    await sock.raw_request(
-                        ".lq.Lobby.prepareLogin",
-                        _prepare_login_body(self.access_token),
-                        timeout=10,
-                    )
-                    self.route_prep = sock
-                    self.route_prep_route_id = route_id
-                    logger.info(f"Route prepareLogin completed on {route_id}")
-                    return True
-                except Exception as exc:
-                    logger.warning(
-                        f"Route prepareLogin failed on {route_id} via {socket_url}: {exc!r}"
-                    )
-                    await sock.close()
-                    self.route_prep = None
-                    self.route_prep_route_id = None
+            sock = LiqiSocket("route-prep", _route_ws_url(route_id))
+            try:
+                await sock.connect(open_timeout=12)
+                await sock.raw_request(
+                    ".lq.Route.requestConnection",
+                    _route_body(2, route_id),
+                    timeout=10,
+                )
+                await sock.raw_request(
+                    ".lq.Lobby.prepareLogin",
+                    _prepare_login_body(self.access_token),
+                    timeout=10,
+                )
+                self.route_prep = sock
+                self.route_prep_route_id = route_id
+                logger.info(f"Route prepareLogin completed on {route_id}")
+                return True
+            except Exception as exc:
+                logger.warning(f"Route prepareLogin failed on {route_id}: {exc!r}")
+                await sock.close()
+                self.route_prep = None
+                self.route_prep_route_id = None
 
         return False
 
-    def _game_route_candidates(self, location: str = "", preferred: str = MAJSOUL_GAME_ROUTE_ID):
+    def _game_route_candidates(self, location: str = "", preferred: str = DEFAULT_ROUTE_ID):
         candidates: list[str] = []
-        route_ids = [str(entry.get("id") or "") for entry in self.route_entries]
-        for item in (preferred, location, *route_ids):
+        for item in (preferred, location, *GAME_ROUTE_IDS):
             if not item:
                 continue
             if isinstance(item, str) and item.startswith("route-") and item not in candidates:
@@ -1709,8 +1436,8 @@ class MajsoulAutomation:
         host and request body. Keep route-2 only as a fallback.
         """
         candidates = [host_route_id]
-        if MAJSOUL_ROUTE_ID not in candidates:
-            candidates.append(MAJSOUL_ROUTE_ID)
+        if DEFAULT_ROUTE_ID not in candidates:
+            candidates.append(DEFAULT_ROUTE_ID)
         return candidates
 
     def _game_ws_urls(self, game_url: str) -> list[str]:

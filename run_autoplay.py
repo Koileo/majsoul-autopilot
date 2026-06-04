@@ -674,7 +674,7 @@ async def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     logger.info("Starting Majsoul autopilot (full-auto protocol mode)...")
-    logger.info(f"Mode: {settings.autoplay_mode.type} | Room: {settings.autoplay_mode.room}")
+    logger.info("Mode target: auto by four-player rank")
 
     # Validate account settings
     if not settings.autoplay_account.username or not settings.autoplay_account.password:

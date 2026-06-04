@@ -508,16 +508,6 @@ class MajsoulBridge:
                             }
                         )
 
-            if liqi_message['data']['name'] == 'ActionBaBei':
-                actor = liqi_message['data']['data']['seat']
-                ret.append(
-                    {
-                        'type': 'nukidora',
-                        'actor': actor,
-                        'pai': 'N'
-                    }
-                )
-
             # hora
             if liqi_message['data']['name'] == 'ActionHule':
                 # actor = liqi_message['data']['hules']['seat']

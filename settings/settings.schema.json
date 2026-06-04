@@ -15,38 +15,11 @@
       },
       "required": ["username", "password"],
       "additionalProperties": false
-    },
-    "autoplay_mode": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["4p_south", "4p_east"]
-        },
-        "room": {
-          "type": "string",
-          "enum": ["bronze", "silver", "gold", "jade", "throne"]
-        }
-      },
-      "required": ["type", "room"],
-      "additionalProperties": false
-    },
-    "autoplay_time": {
-      "type": "object",
-      "description": "Random delay window before submitting protocol operations.",
-      "properties": {
-        "rand_min": { "type": "number", "minimum": 0 },
-        "rand_max": { "type": "number", "minimum": 0 }
-      },
-      "required": ["rand_min", "rand_max"],
-      "additionalProperties": false
     }
   },
   "required": [
     "model_path",
-    "autoplay_account",
-    "autoplay_mode",
-    "autoplay_time"
+    "autoplay_account"
   ],
   "additionalProperties": false
 }

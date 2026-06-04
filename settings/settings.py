@@ -11,36 +11,20 @@ FILE_PATH = Path(__file__).resolve().parent
 
 
 @dataclasses.dataclass
-class AutoplayTimeConfig:
-    rand_min: float
-    rand_max: float
-
-
-@dataclasses.dataclass
 class AutoplayAccountConfig:
     username: str
     password: str
 
 
 @dataclasses.dataclass
-class AutoplayModeConfig:
-    type: str
-    room: str
-
-
-@dataclasses.dataclass
 class Settings:
     model_path: str
-    autoplay_time: AutoplayTimeConfig
     autoplay_account: AutoplayAccountConfig
-    autoplay_mode: AutoplayModeConfig
 
     def update(self, raw: dict) -> None:
         normalized = _normalize_settings(raw)
         self.model_path = normalized["model_path"]
-        self.autoplay_time = AutoplayTimeConfig(**normalized["autoplay_time"])
         self.autoplay_account = AutoplayAccountConfig(**normalized["autoplay_account"])
-        self.autoplay_mode = AutoplayModeConfig(**normalized["autoplay_mode"])
         self.save()
 
     def save(self) -> None:
@@ -51,18 +35,10 @@ class Settings:
 
 def _default_settings() -> dict:
     return {
-        "model_path": "mjai_bot/mortal/mortal.pth",
+        "model_path": "mjai_bot/mortal/mortal_298k.pth",
         "autoplay_account": {
             "username": "",
             "password": "",
-        },
-        "autoplay_mode": {
-            "type": "4p_south",
-            "room": "gold",
-        },
-        "autoplay_time": {
-            "rand_min": 1.0,
-            "rand_max": 3.0,
         },
     }
 
@@ -83,20 +59,6 @@ def _normalize_settings(raw: dict) -> dict:
             "password": account.get("password", ""),
         }
 
-    if isinstance(raw.get("autoplay_mode"), dict):
-        mode = raw["autoplay_mode"]
-        data["autoplay_mode"] = {
-            "type": mode.get("type", data["autoplay_mode"]["type"]),
-            "room": mode.get("room", data["autoplay_mode"]["room"]),
-        }
-
-    if isinstance(raw.get("autoplay_time"), dict):
-        timing = raw["autoplay_time"]
-        data["autoplay_time"] = {
-            "rand_min": timing.get("rand_min", data["autoplay_time"]["rand_min"]),
-            "rand_max": timing.get("rand_max", data["autoplay_time"]["rand_max"]),
-        }
-
     return data
 
 
@@ -104,8 +66,6 @@ def _settings_to_dict(settings: Settings) -> dict:
     return {
         "model_path": settings.model_path,
         "autoplay_account": dataclasses.asdict(settings.autoplay_account),
-        "autoplay_mode": dataclasses.asdict(settings.autoplay_mode),
-        "autoplay_time": dataclasses.asdict(settings.autoplay_time),
     }
 
 
@@ -114,9 +74,7 @@ def _parse_settings(raw: dict) -> Settings:
     jsonschema.validate(data, get_schema())
     return Settings(
         model_path=data["model_path"],
-        autoplay_time=AutoplayTimeConfig(**data["autoplay_time"]),
         autoplay_account=AutoplayAccountConfig(**data["autoplay_account"]),
-        autoplay_mode=AutoplayModeConfig(**data["autoplay_mode"]),
     )
 
 

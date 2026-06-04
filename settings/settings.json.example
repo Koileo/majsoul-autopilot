@@ -1,15 +1,7 @@
 {
-  "model_path": "mjai_bot/mortal/mortal.pth",
+  "model_path": "mjai_bot/mortal/mortal_298k.pth",
   "autoplay_account": {
     "username": "your_email@example.com",
     "password": "your_password"
   },
-  "autoplay_mode": {
-    "type": "4p_south",
-    "room": "gold"
-  },
-  "autoplay_time": {
-    "rand_min": 1.0,
-    "rand_max": 3.0
-  }
 }

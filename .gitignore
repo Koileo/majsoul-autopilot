@@ -7,16 +7,10 @@ __pycache__/
 # IDE
 .idea/
 
-# Browser profile (Playwright/Chromium data)
-.browser_profile/
-
 # Logs
 logs/
 *.log
 err.log
-
-# Local one-off delivery artifacts
-shadowrocket_qr/
 
 # Model weights
 *.pth

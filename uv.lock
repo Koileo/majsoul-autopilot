@@ -200,7 +200,6 @@ dependencies = [
     { name = "mjai" },
     { name = "numpy" },
     { name = "protobuf" },
-    { name = "requests" },
     { name = "torch" },
     { name = "websockets" },
 ]
@@ -212,7 +211,6 @@ requires-dist = [
     { name = "mjai", specifier = "==0.2.1" },
     { name = "numpy", specifier = "==2.1.2" },
     { name = "protobuf", specifier = "==5.29.3" },
-    { name = "requests", specifier = "==2.32.3" },
     { name = "torch", specifier = "==2.5.1" },
     { name = "websockets", specifier = "==12.0" },
 ]
