@@ -10,7 +10,11 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+autoplay = { path = "../autoplay" }
 clap = { workspace = true, features = ["derive"] }
+liqi = { path = "../liqi" }
+mjai = { path = "../mjai" }
+mortal = { path = "../mortal" }
 protocol = { path = "../protocol" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

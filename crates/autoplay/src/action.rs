@@ -3,6 +3,11 @@ pub enum BotAction {
     Dahai { tile: String, tsumogiri: bool },
     None,
     Reach { tile: String, tsumogiri: bool },
+    Chi { consumed: Vec<String> },
+    Pon { consumed: Vec<String> },
+    Daiminkan { consumed: Vec<String> },
+    Ankan { consumed: Vec<String> },
+    Kakan { tile: String },
     Hora { tsumo: bool },
     Ryukyoku,
 }
@@ -43,9 +48,19 @@ pub enum RpcPlan {
     Skip,
     IgnoreStale,
     RefuseNoDiscardWindow,
+    ChiPengGang {
+        r#type: u32,
+        index: u32,
+        timeuse: u32,
+    },
 }
 
 pub const OP_DISCARD: u32 = 1;
+pub const OP_CHI: u32 = 2;
+pub const OP_PENG: u32 = 3;
+pub const OP_AN_GANG: u32 = 4;
+pub const OP_MING_GANG: u32 = 5;
+pub const OP_JIA_GANG: u32 = 6;
 pub const OP_LIQI: u32 = 7;
 pub const OP_ZIMO: u32 = 8;
 pub const OP_HU: u32 = 9;
@@ -65,20 +80,21 @@ pub fn plan_action(pending: &PendingAction, state: &ActionState) -> RpcPlan {
             }
             RpcPlan::InputOperation {
                 r#type: OP_DISCARD,
-                tile: Some(tile.clone()),
+                tile: Some(mjai_tile_to_ms(tile)),
                 moqie: *tsumogiri,
                 timeuse: 3,
             }
         }
         BotAction::None => RpcPlan::Skip,
         BotAction::Reach { tile, tsumogiri } => {
+            let requested_tile = mjai_tile_to_ms(tile);
             let valid_tiles = state
                 .operations
                 .iter()
                 .find(|op| op.r#type == OP_LIQI)
                 .map(|op| op.combination.as_slice())
                 .unwrap_or(&[]);
-            let (tile, _) = select_riichi_declaration_tile(tile, valid_tiles);
+            let (tile, _) = select_riichi_declaration_tile(&requested_tile, valid_tiles);
             RpcPlan::InputOperation {
                 r#type: OP_LIQI,
                 tile: Some(tile),
@@ -86,6 +102,33 @@ pub fn plan_action(pending: &PendingAction, state: &ActionState) -> RpcPlan {
                 timeuse: 3,
             }
         }
+        BotAction::Chi { consumed } => RpcPlan::ChiPengGang {
+            r#type: OP_CHI,
+            index: select_chi_combination_index(consumed, &state.operations),
+            timeuse: 3,
+        },
+        BotAction::Pon { .. } => RpcPlan::ChiPengGang {
+            r#type: OP_PENG,
+            index: 0,
+            timeuse: 3,
+        },
+        BotAction::Daiminkan { .. } => RpcPlan::ChiPengGang {
+            r#type: OP_MING_GANG,
+            index: 0,
+            timeuse: 3,
+        },
+        BotAction::Ankan { consumed } => RpcPlan::InputOperation {
+            r#type: OP_AN_GANG,
+            tile: consumed.first().map(|tile| mjai_tile_to_ms(tile)),
+            moqie: false,
+            timeuse: 3,
+        },
+        BotAction::Kakan { tile } => RpcPlan::InputOperation {
+            r#type: OP_JIA_GANG,
+            tile: Some(mjai_tile_to_ms(tile)),
+            moqie: false,
+            timeuse: 3,
+        },
         BotAction::Hora { tsumo } => RpcPlan::InputOperation {
             r#type: if *tsumo { OP_ZIMO } else { OP_HU },
             tile: None,
@@ -105,6 +148,7 @@ pub fn select_riichi_declaration_tile(
     model_tile: &str,
     valid_tiles: &[String],
 ) -> (String, &'static str) {
+    // Keep this aligned with Python's _select_riichi_declaration_tile.
     if valid_tiles.is_empty() {
         return (model_tile.to_string(), "model-no-candidates");
     }
@@ -122,6 +166,29 @@ pub fn select_riichi_declaration_tile(
     (valid_tiles[0].clone(), "fallback-first-candidate")
 }
 
+pub fn select_chi_combination_index(consumed: &[String], operations: &[Operation]) -> u32 {
+    let Some(chi_op) = operations.iter().find(|op| op.r#type == OP_CHI) else {
+        return 0;
+    };
+    let mut consumed_sorted = consumed
+        .iter()
+        .map(|tile| mjai_tile_to_ms(tile))
+        .collect::<Vec<_>>();
+    consumed_sorted.sort();
+
+    for (idx, combination) in chi_op.combination.iter().enumerate() {
+        let mut combo_sorted = combination
+            .split('|')
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        combo_sorted.sort();
+        if combo_sorted == consumed_sorted {
+            return idx as u32;
+        }
+    }
+    0
+}
+
 fn candidate_kind(tile: &str) -> String {
     if tile.len() == 2
         && tile.starts_with('0')
@@ -131,6 +198,23 @@ fn candidate_kind(tile: &str) -> String {
     } else {
         tile.to_string()
     }
+}
+
+fn mjai_tile_to_ms(tile: &str) -> String {
+    match tile {
+        "5mr" => "0m",
+        "5pr" => "0p",
+        "5sr" => "0s",
+        "E" => "1z",
+        "S" => "2z",
+        "W" => "3z",
+        "N" => "4z",
+        "P" => "5z",
+        "F" => "6z",
+        "C" => "7z",
+        other => other,
+    }
+    .to_string()
 }
 
 #[cfg(test)]
@@ -203,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn riichi_falls_back_to_first_candidate_only_when_model_tile_is_invalid() {
+    fn riichi_matches_python_first_candidate_when_model_tile_is_invalid() {
         let valid = vec!["1m".to_string(), "3p".to_string()];
         assert_eq!(
             select_riichi_declaration_tile("9s", &valid),
@@ -239,4 +323,125 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn chi_action_selects_matching_combination_index() {
+        let plan = plan_action(
+            &PendingAction {
+                action: BotAction::Chi {
+                    consumed: vec!["4m".to_string(), "2m".to_string()],
+                },
+                context: Some(ctx(1)),
+            },
+            &ActionState {
+                current_context: Some(ctx(1)),
+                operations: vec![Operation {
+                    r#type: OP_CHI,
+                    combination: vec!["1m|2m".to_string(), "2m|4m".to_string()],
+                }],
+            },
+        );
+        assert_eq!(
+            plan,
+            RpcPlan::ChiPengGang {
+                r#type: OP_CHI,
+                index: 1,
+                timeuse: 3
+            }
+        );
+    }
+
+    #[test]
+    fn pon_and_daiminkan_use_chi_peng_gang_rpc() {
+        let state = ActionState {
+            current_context: Some(ctx(1)),
+            operations: vec![],
+        };
+        let pon = plan_action(
+            &PendingAction {
+                action: BotAction::Pon {
+                    consumed: vec!["5p".to_string(), "5p".to_string()],
+                },
+                context: Some(ctx(1)),
+            },
+            &state,
+        );
+        assert_eq!(
+            pon,
+            RpcPlan::ChiPengGang {
+                r#type: OP_PENG,
+                index: 0,
+                timeuse: 3
+            }
+        );
+
+        let daiminkan = plan_action(
+            &PendingAction {
+                action: BotAction::Daiminkan {
+                    consumed: vec!["E".to_string(), "E".to_string(), "E".to_string()],
+                },
+                context: Some(ctx(1)),
+            },
+            &state,
+        );
+        assert_eq!(
+            daiminkan,
+            RpcPlan::ChiPengGang {
+                r#type: OP_MING_GANG,
+                index: 0,
+                timeuse: 3
+            }
+        );
+    }
+
+    #[test]
+    fn ankan_and_kakan_use_self_operation_rpc() {
+        let state = ActionState {
+            current_context: Some(ctx(1)),
+            operations: vec![],
+        };
+        let ankan = plan_action(
+            &PendingAction {
+                action: BotAction::Ankan {
+                    consumed: vec![
+                        "5mr".to_string(),
+                        "5m".to_string(),
+                        "5m".to_string(),
+                        "5m".to_string(),
+                    ],
+                },
+                context: Some(ctx(1)),
+            },
+            &state,
+        );
+        assert_eq!(
+            ankan,
+            RpcPlan::InputOperation {
+                r#type: OP_AN_GANG,
+                tile: Some("0m".to_string()),
+                moqie: false,
+                timeuse: 3
+            }
+        );
+
+        let kakan = plan_action(
+            &PendingAction {
+                action: BotAction::Kakan {
+                    tile: "5p".to_string(),
+                },
+                context: Some(ctx(1)),
+            },
+            &state,
+        );
+        assert_eq!(
+            kakan,
+            RpcPlan::InputOperation {
+                r#type: OP_JIA_GANG,
+                tile: Some("5p".to_string()),
+                moqie: false,
+                timeuse: 3
+            }
+        );
+    }
+
 }

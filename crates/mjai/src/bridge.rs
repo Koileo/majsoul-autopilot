@@ -1,6 +1,7 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use liqi::pb;
 use prost::Message;
+use std::time::Instant;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -32,6 +33,33 @@ pub enum Event {
         pai: String,
         tsumogiri: bool,
     },
+    Chi {
+        actor: u32,
+        target: u32,
+        pai: String,
+        consumed: Vec<String>,
+    },
+    Pon {
+        actor: u32,
+        target: u32,
+        pai: String,
+        consumed: Vec<String>,
+    },
+    Daiminkan {
+        actor: u32,
+        target: u32,
+        pai: String,
+        consumed: Vec<String>,
+    },
+    Ankan {
+        actor: u32,
+        consumed: Vec<String>,
+    },
+    Kakan {
+        actor: u32,
+        pai: String,
+        consumed: Vec<String>,
+    },
     EndKyoku,
     EndGame,
 }
@@ -40,6 +68,8 @@ pub enum Event {
 pub struct OperationContext {
     pub source: String,
     pub seat: u32,
+    pub received_key: u64,
+    pub received_at: Instant,
     pub time_add: u32,
     pub time_fixed: u32,
     pub passed_waiting_time: u32,
@@ -49,9 +79,12 @@ pub struct OperationContext {
 pub struct Bridge {
     seat: u32,
     doras: Vec<String>,
+    my_tehais: Vec<String>,
+    my_tsumohai: Option<String>,
     accept_reach: Option<Event>,
     last_operation_list: Vec<pb::OptionalOperation>,
     last_operation_context: Option<OperationContext>,
+    received_key: u64,
     discard_counter: u64,
     round_end_counter: u64,
 }
@@ -80,7 +113,29 @@ impl Bridge {
         self.round_end_counter
     }
 
+    pub fn seat(&self) -> u32 {
+        self.seat
+    }
+
+    pub fn my_tehais(&self) -> &[String] {
+        &self.my_tehais
+    }
+
+    pub fn my_tsumohai(&self) -> Option<&str> {
+        self.my_tsumohai.as_deref()
+    }
+
     pub fn handle_action(&mut self, name: &str, data: &[u8]) -> Result<Vec<Event>> {
+        self.handle_action_with_waiting(name, data, 0)
+    }
+
+    pub fn handle_action_with_waiting(
+        &mut self,
+        name: &str,
+        data: &[u8],
+        passed_waiting_time: u32,
+    ) -> Result<Vec<Event>> {
+        self.received_key += 1;
         let mut events = Vec::new();
         if let Some(event) = self.accept_reach.take() {
             events.push(event);
@@ -89,12 +144,12 @@ impl Bridge {
         match name {
             "ActionNewRound" => {
                 let action = pb::ActionNewRound::decode(data)?;
-                self.all_ready_new_round(&action, &mut events);
+                self.all_ready_new_round(&action, &mut events, passed_waiting_time);
             }
             "ActionDealTile" => {
                 let action = pb::ActionDealTile::decode(data)?;
-                if let Some(operation) = action.operation {
-                    self.set_operation("ActionDealTile", operation, 0);
+                if let Some(operation) = action.operation.clone() {
+                    self.set_operation("ActionDealTile", operation, passed_waiting_time);
                 } else {
                     self.clear_operation();
                 }
@@ -103,6 +158,9 @@ impl Bridge {
                 } else {
                     ms_tile_to_mjai(&action.tile)
                 };
+                if action.seat == self.seat {
+                    self.my_tsumohai = Some(pai.clone());
+                }
                 events.push(Event::Tsumo {
                     actor: action.seat,
                     pai,
@@ -111,8 +169,8 @@ impl Bridge {
             }
             "ActionDiscardTile" => {
                 let action = pb::ActionDiscardTile::decode(data)?;
-                if let Some(operation) = action.operation {
-                    self.set_operation("ActionDiscardTile", operation, 0);
+                if let Some(operation) = action.operation.clone() {
+                    self.set_operation("ActionDiscardTile", operation, passed_waiting_time);
                 } else {
                     self.clear_operation();
                 }
@@ -120,14 +178,37 @@ impl Bridge {
                 if action.is_liqi {
                     events.push(Event::Reach { actor: action.seat });
                 }
+                let pai = ms_tile_to_mjai(&action.tile);
+                if action.seat == self.seat {
+                    self.apply_self_discard(&pai, action.moqie);
+                }
                 events.push(Event::Dahai {
                     actor: action.seat,
-                    pai: ms_tile_to_mjai(&action.tile),
+                    pai,
                     tsumogiri: action.moqie,
                 });
                 if action.is_liqi {
                     self.accept_reach = Some(Event::ReachAccepted { actor: action.seat });
                 }
+                self.update_dora_events(&action.doras);
+            }
+            "ActionChiPengGang" => {
+                let action = pb::ActionChiPengGang::decode(data)?;
+                if let Some(operation) = action.operation.clone() {
+                    self.set_operation("ActionChiPengGang", operation, passed_waiting_time);
+                } else {
+                    self.clear_operation();
+                }
+                events.push(chi_peng_gang_event(&action)?);
+            }
+            "ActionAnGangAddGang" => {
+                let action = pb::ActionAnGangAddGang::decode(data)?;
+                if let Some(operation) = action.operation.clone() {
+                    self.set_operation("ActionAnGangAddGang", operation, passed_waiting_time);
+                } else {
+                    self.clear_operation();
+                }
+                events.push(an_gang_add_gang_event(&action)?);
                 self.update_dora_events(&action.doras);
             }
             "ActionHule" | "ActionNoTile" | "ActionLiuJu" => {
@@ -141,7 +222,12 @@ impl Bridge {
         Ok(events)
     }
 
-    fn all_ready_new_round(&mut self, action: &pb::ActionNewRound, events: &mut Vec<Event>) {
+    fn all_ready_new_round(
+        &mut self,
+        action: &pb::ActionNewRound,
+        events: &mut Vec<Event>,
+        passed_waiting_time: u32,
+    ) {
         let bakaze = ["E", "S", "W", "N"]
             .get(action.chang as usize)
             .unwrap_or(&"?")
@@ -165,6 +251,8 @@ impl Bridge {
             .map(|tile| ms_tile_to_mjai(tile))
             .collect::<Vec<_>>();
         my_tehais.sort_by_key(|tile| tile_sort_key(tile));
+        self.my_tehais = my_tehais.clone();
+        self.my_tsumohai = None;
         tehais[self.seat as usize] = my_tehais;
 
         events.push(Event::StartKyoku {
@@ -179,14 +267,13 @@ impl Bridge {
         });
 
         if action.tiles.len() == 14 {
-            events.push(Event::Tsumo {
-                actor: self.seat,
-                pai: ms_tile_to_mjai(&action.tiles[13]),
-            });
+            let pai = ms_tile_to_mjai(&action.tiles[13]);
+            self.my_tsumohai = Some(pai.clone());
+            events.push(Event::Tsumo { actor: self.seat, pai });
         }
 
         if let Some(operation) = action.operation.clone() {
-            self.set_operation("ActionNewRound", operation, 0);
+            self.set_operation("ActionNewRound", operation, passed_waiting_time);
         } else {
             self.clear_operation();
         }
@@ -202,6 +289,8 @@ impl Bridge {
         self.last_operation_context = Some(OperationContext {
             source: source.to_string(),
             seat: operation.seat,
+            received_key: self.received_key,
+            received_at: Instant::now(),
             time_add: operation.time_add,
             time_fixed: operation.time_fixed,
             passed_waiting_time,
@@ -218,6 +307,114 @@ impl Bridge {
             self.doras = doras.to_vec();
         }
     }
+
+    fn apply_self_discard(&mut self, pai: &str, tsumogiri: bool) {
+        if tsumogiri {
+            self.my_tsumohai = None;
+            return;
+        }
+
+        if let Some(pos) = self.my_tehais.iter().position(|tile| tile == pai) {
+            self.my_tehais.remove(pos);
+        }
+        if let Some(tsumo) = self.my_tsumohai.take() {
+            self.my_tehais.push(tsumo);
+            self.my_tehais.sort_by_key(|tile| tile_sort_key(tile));
+        }
+    }
+}
+
+fn chi_peng_gang_event(action: &pb::ActionChiPengGang) -> Result<Event> {
+    let actor = action.seat;
+    let mut target = None;
+    let mut pai = None;
+    let mut consumed = Vec::new();
+
+    for (idx, from) in action.froms.iter().copied().enumerate() {
+        let Some(tile) = action.tiles.get(idx) else {
+            bail!("ActionChiPengGang froms/tiles length mismatch");
+        };
+        if from != actor {
+            target = Some(from);
+            pai = Some(ms_tile_to_mjai(tile));
+        } else {
+            consumed.push(ms_tile_to_mjai(tile));
+        }
+    }
+
+    let Some(target) = target else {
+        bail!("ActionChiPengGang has no target seat");
+    };
+    let Some(pai) = pai else {
+        bail!("ActionChiPengGang has no target tile");
+    };
+
+    match action.r#type {
+        0 => {
+            if consumed.len() != 2 {
+                bail!("chi consumed tile count is {}", consumed.len());
+            }
+            Ok(Event::Chi {
+                actor,
+                target,
+                pai,
+                consumed,
+            })
+        }
+        1 => {
+            if consumed.len() != 2 {
+                bail!("pon consumed tile count is {}", consumed.len());
+            }
+            Ok(Event::Pon {
+                actor,
+                target,
+                pai,
+                consumed,
+            })
+        }
+        2 => {
+            if consumed.len() != 3 {
+                bail!("daiminkan consumed tile count is {}", consumed.len());
+            }
+            Ok(Event::Daiminkan {
+                actor,
+                target,
+                pai,
+                consumed,
+            })
+        }
+        other => bail!("unknown ActionChiPengGang type {other}"),
+    }
+}
+
+fn an_gang_add_gang_event(action: &pb::ActionAnGangAddGang) -> Result<Event> {
+    let actor = action.seat;
+    let pai = ms_tile_to_mjai(&action.tiles);
+    match action.r#type {
+        3 => Ok(Event::Ankan {
+            actor,
+            consumed: repeated_kan_tiles(&pai, 4, true),
+        }),
+        2 => Ok(Event::Kakan {
+            actor,
+            pai: pai.clone(),
+            consumed: repeated_kan_tiles(&pai, 3, !pai.ends_with('r')),
+        }),
+        other => bail!("unknown ActionAnGangAddGang type {other}"),
+    }
+}
+
+fn repeated_kan_tiles(pai: &str, count: usize, force_red_five: bool) -> Vec<String> {
+    let base = pai.replace('r', "");
+    let mut consumed = vec![base; count];
+    if force_red_five && is_five_suit_tile(pai) {
+        consumed[0].push('r');
+    }
+    consumed
+}
+
+fn is_five_suit_tile(tile: &str) -> bool {
+    tile.starts_with('5') && matches!(tile.as_bytes().get(1), Some(b'm' | b'p' | b's'))
 }
 
 pub fn ms_tile_to_mjai(tile: &str) -> String {
@@ -381,5 +578,174 @@ mod tests {
         assert_eq!(bridge.round_end_counter(), 1);
         assert!(bridge.last_operation_list().is_empty());
         assert!(bridge.last_operation_context().is_none());
+    }
+
+    #[test]
+    fn bridge_tracks_own_tehai_and_tsumo_like_python_bridge() {
+        let mut bridge = Bridge::new(0);
+        let data = encode(pb::ActionNewRound {
+            chang: 0,
+            ju: 0,
+            tiles: vec![
+                "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "1z", "2z", "3z", "4z",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+            doras: vec!["4p".to_string()],
+            scores: vec![25000, 25000, 25000, 25000],
+            ..Default::default()
+        });
+        bridge.handle_action("ActionNewRound", &data).unwrap();
+        assert_eq!(bridge.my_tehais().len(), 13);
+        assert_eq!(bridge.my_tsumohai(), None);
+
+        let deal = encode(pb::ActionDealTile {
+            seat: 0,
+            tile: "0p".to_string(),
+            ..Default::default()
+        });
+        bridge.handle_action("ActionDealTile", &deal).unwrap();
+        assert_eq!(bridge.my_tsumohai(), Some("5pr"));
+
+        let discard = encode(pb::ActionDiscardTile {
+            seat: 0,
+            tile: "2m".to_string(),
+            moqie: false,
+            ..Default::default()
+        });
+        bridge.handle_action("ActionDiscardTile", &discard).unwrap();
+        assert_eq!(bridge.my_tsumohai(), None);
+        assert!(!bridge.my_tehais().contains(&"2m".to_string()));
+        assert!(bridge.my_tehais().contains(&"5pr".to_string()));
+
+        let deal = encode(pb::ActionDealTile {
+            seat: 0,
+            tile: "9p".to_string(),
+            ..Default::default()
+        });
+        bridge.handle_action("ActionDealTile", &deal).unwrap();
+        let discard = encode(pb::ActionDiscardTile {
+            seat: 0,
+            tile: "9p".to_string(),
+            moqie: true,
+            ..Default::default()
+        });
+        bridge.handle_action("ActionDiscardTile", &discard).unwrap();
+        assert_eq!(bridge.my_tsumohai(), None);
+        assert!(!bridge.my_tehais().contains(&"9p".to_string()));
+    }
+
+    #[test]
+    fn chi_peng_gang_maps_target_pai_and_consumed_tiles() {
+        let mut bridge = Bridge::new(0);
+        let chi = encode(pb::ActionChiPengGang {
+            seat: 1,
+            r#type: 0,
+            tiles: vec!["2m".to_string(), "3m".to_string(), "4m".to_string()],
+            froms: vec![1, 0, 1],
+            operation: Some(pb::OptionalOperationList {
+                seat: 1,
+                operation_list: vec![pb::OptionalOperation {
+                    r#type: 1,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let events = bridge.handle_action("ActionChiPengGang", &chi).unwrap();
+        assert_eq!(
+            events,
+            vec![Event::Chi {
+                actor: 1,
+                target: 0,
+                pai: "3m".to_string(),
+                consumed: vec!["2m".to_string(), "4m".to_string()]
+            }]
+        );
+        assert_eq!(
+            bridge.last_operation_context().unwrap().source,
+            "ActionChiPengGang"
+        );
+
+        let pon = encode(pb::ActionChiPengGang {
+            seat: 2,
+            r#type: 1,
+            tiles: vec!["5p".to_string(), "0p".to_string(), "5p".to_string()],
+            froms: vec![2, 3, 2],
+            ..Default::default()
+        });
+        let events = bridge.handle_action("ActionChiPengGang", &pon).unwrap();
+        assert_eq!(
+            events,
+            vec![Event::Pon {
+                actor: 2,
+                target: 3,
+                pai: "5pr".to_string(),
+                consumed: vec!["5p".to_string(), "5p".to_string()]
+            }]
+        );
+
+        let daiminkan = encode(pb::ActionChiPengGang {
+            seat: 3,
+            r#type: 2,
+            tiles: vec!["7z".to_string(), "7z".to_string(), "7z".to_string(), "7z".to_string()],
+            froms: vec![3, 3, 1, 3],
+            ..Default::default()
+        });
+        let events = bridge
+            .handle_action("ActionChiPengGang", &daiminkan)
+            .unwrap();
+        assert_eq!(
+            events,
+            vec![Event::Daiminkan {
+                actor: 3,
+                target: 1,
+                pai: "C".to_string(),
+                consumed: vec!["C".to_string(), "C".to_string(), "C".to_string()]
+            }]
+        );
+    }
+
+    #[test]
+    fn ankan_and_kakan_expand_consumed_tiles_like_python_bridge() {
+        let mut bridge = Bridge::new(0);
+        let ankan = encode(pb::ActionAnGangAddGang {
+            seat: 0,
+            r#type: 3,
+            tiles: "0m".to_string(),
+            ..Default::default()
+        });
+        let events = bridge.handle_action("ActionAnGangAddGang", &ankan).unwrap();
+        assert_eq!(
+            events,
+            vec![Event::Ankan {
+                actor: 0,
+                consumed: vec![
+                    "5mr".to_string(),
+                    "5m".to_string(),
+                    "5m".to_string(),
+                    "5m".to_string()
+                ]
+            }]
+        );
+
+        let kakan = encode(pb::ActionAnGangAddGang {
+            seat: 0,
+            r#type: 2,
+            tiles: "5p".to_string(),
+            doras: vec!["1s".to_string(), "9s".to_string()],
+            ..Default::default()
+        });
+        let events = bridge.handle_action("ActionAnGangAddGang", &kakan).unwrap();
+        assert_eq!(
+            events,
+            vec![Event::Kakan {
+                actor: 0,
+                pai: "5p".to_string(),
+                consumed: vec!["5pr".to_string(), "5p".to_string(), "5p".to_string()]
+            }]
+        );
     }
 }

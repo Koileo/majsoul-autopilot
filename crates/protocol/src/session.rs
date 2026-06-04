@@ -1,11 +1,20 @@
 use anyhow::{anyhow, Result};
-use liqi::pb;
+use liqi::{
+    codec::{decode_action_payload, notify_body, response_body},
+    pb,
+};
+use mjai::{
+    bridge::{Bridge, Event},
+};
+use prost::Message;
 
 use crate::{
     config::{match_sid, rank_tier_from_level_id, target_mode_for_rank_level, Mode, Room},
     login::{client_version_string, login_payload},
     routes::{
-        lobby_ws_url_candidates, prepare_login_body, route_body, route_ws_url, GAME_ROUTE_IDS,
+        game_gateway_tail, game_route_candidates, game_ws_urls, lobby_ws_url_candidates,
+        prepare_login_body, request_route_candidates, route_body, route_id_from_ws_url,
+        route_ws_url, GAME_ROUTE_IDS,
     },
     transport::LiqiSocket,
 };
@@ -19,6 +28,33 @@ pub struct LoginSummary {
     pub target_mode: Mode,
     pub target_room: Room,
     pub access_token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchStart {
+    pub game_url: String,
+    pub connect_token: String,
+    pub game_uuid: String,
+    pub match_mode_id: u32,
+    pub location: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExistingGame {
+    pub connect_token: String,
+    pub game_uuid: String,
+    pub location: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StartMatchResult {
+    Queued(String),
+    Busy,
+}
+
+pub struct GameSession {
+    socket: LiqiSocket,
+    pub bridge: Bridge,
 }
 
 pub struct ProtocolClient {
@@ -49,6 +85,20 @@ impl ProtocolClient {
         let login = login_payload(username, password, device_id, false);
         let response: pb::ResLogin = socket.request(".lq.Lobby.login", &login).await?;
         let summary = login_summary(response)?;
+        let _ = socket
+            .request::<_, pb::ResCommon>(
+                ".lq.Lobby.loginBeat",
+                &pb::ReqLoginBeat {
+                    contract: crate::login::LOGIN_BEAT_CONTRACT.to_string(),
+                },
+            )
+            .await;
+        let _ = socket
+            .request::<_, pb::ResCommon>(".lq.Lobby.loginSuccess", &pb::ReqCommon {})
+            .await;
+        let _ = socket
+            .request::<_, pb::ResFetchInfo>(".lq.Lobby.fetchInfo", &pb::ReqCommon {})
+            .await;
         Ok(Self {
             socket,
             route_id,
@@ -57,7 +107,7 @@ impl ProtocolClient {
         })
     }
 
-    pub async fn start_match(&mut self) -> Result<String> {
+    pub async fn start_match(&mut self) -> Result<StartMatchResult> {
         self.prepare_game_route().await?;
         let sid = match_sid(&self.summary.target_mode, &self.summary.target_room)
             .ok_or_else(|| anyhow!("no match sid for current target"))?;
@@ -70,6 +120,12 @@ impl ProtocolClient {
             .await?;
         if let Some(error) = response.error {
             if error.code != 0 {
+                if error.code == 1023 {
+                    return Ok(StartMatchResult::Busy);
+                }
+                if error.code == 1304 {
+                    return Ok(StartMatchResult::Queued(sid));
+                }
                 return Err(anyhow!(
                     "startUnifiedMatch failed: code={} str={:?} u32={:?}",
                     error.code,
@@ -78,7 +134,132 @@ impl ProtocolClient {
                 ));
             }
         }
-        Ok(sid)
+        Ok(StartMatchResult::Queued(sid))
+    }
+
+    pub async fn wait_for_match_start(&mut self) -> Result<MatchStart> {
+        loop {
+            let raw = self.socket.next_binary_frame().await?;
+            if raw.first().copied() != Some(0x01) {
+                continue;
+            }
+            let notify = notify_body(&raw).map_err(|err| anyhow!(err))?;
+            match notify.method.as_str() {
+                ".lq.NotifyMatchGameStart" => {
+                    let msg = pb::NotifyMatchGameStart::decode(notify.body.as_slice())?;
+                    return Ok(MatchStart {
+                        game_url: msg.game_url,
+                        connect_token: msg.connect_token,
+                        game_uuid: msg.game_uuid,
+                        match_mode_id: msg.match_mode_id,
+                        location: msg.location,
+                    });
+                }
+                ".lq.NotifyMatchFailed" => return Err(anyhow!("match failed")),
+                ".lq.NotifyMatchTimeout" => return Err(anyhow!("match timeout")),
+                _ => {}
+            }
+        }
+    }
+
+    pub async fn fetch_existing_game(&mut self) -> Result<Option<ExistingGame>> {
+        let response: pb::ResFetchGamingInfo = self
+            .socket
+            .request(".lq.Lobby.fetchGamingInfo", &pb::ReqCommon {})
+            .await?;
+        if let Some(error) = response.error {
+            if error.code != 0 {
+                return Err(anyhow!("fetchGamingInfo failed: code={}", error.code));
+            }
+        }
+        Ok(response.game_info.map(|info| ExistingGame {
+            connect_token: info.connect_token,
+            game_uuid: info.game_uuid,
+            location: info.location,
+        }))
+    }
+
+    pub async fn connect_game(&mut self, start: &MatchStart) -> Result<(GameSession, Vec<Event>)> {
+        tokio::time::sleep(std::time::Duration::from_millis(5500)).await;
+        let mut last_error = None;
+        let tail = game_gateway_tail(&start.location);
+        for route in game_route_candidates(&start.location, &self.route_id) {
+            let url = route_ws_url(&route, tail);
+            for request_route in request_route_candidates(&route) {
+                match connect_game_once(
+                    self.summary.account_id,
+                    &url,
+                    &request_route,
+                    &start.connect_token,
+                    &start.game_uuid,
+                )
+                .await
+                {
+                    Ok(session) => return Ok(session),
+                    Err(err) => last_error = Some(err),
+                }
+            }
+        }
+
+        for url in game_ws_urls(&start.game_url) {
+            let mut request_routes = Vec::new();
+            if let Some(route) = route_id_from_ws_url(&url) {
+                request_routes.push(route);
+            }
+            if start.location.starts_with("route-")
+                && !request_routes.iter().any(|route| route == &start.location)
+            {
+                request_routes.push(start.location.clone());
+            }
+            for route in GAME_ROUTE_IDS {
+                if !request_routes.iter().any(|candidate| candidate == route) {
+                    request_routes.push(route.to_string());
+                }
+            }
+
+            for request_route in request_routes {
+                match connect_game_once(
+                    self.summary.account_id,
+                    &url,
+                    &request_route,
+                    &start.connect_token,
+                    &start.game_uuid,
+                )
+                .await
+                {
+                    Ok(session) => return Ok(session),
+                    Err(err) => last_error = Some(err),
+                }
+            }
+        }
+        Err(last_error.unwrap_or_else(|| anyhow!("game websocket handshake failed for all routes")))
+    }
+
+    pub async fn connect_existing_game(
+        &mut self,
+        game: &ExistingGame,
+    ) -> Result<(GameSession, Vec<Event>)> {
+        self.prepare_game_route().await?;
+        let mut last_error = None;
+        let tail = game_gateway_tail(&game.location);
+        for route in game_route_candidates(&game.location, &self.route_id) {
+            let url = route_ws_url(&route, tail);
+            for request_route in request_route_candidates(&route) {
+                match connect_game_once(
+                    self.summary.account_id,
+                    &url,
+                    &request_route,
+                    &game.connect_token,
+                    &game.game_uuid,
+                )
+                .await
+                {
+                    Ok(session) => return Ok(session),
+                    Err(err) => last_error = Some(err),
+                }
+            }
+        }
+        Err(last_error.unwrap_or_else(|| anyhow!("existing game reconnect failed for all routes")))
     }
 
     pub async fn cancel_match(&mut self) -> Result<()> {
@@ -143,6 +324,142 @@ impl ProtocolClient {
     }
 }
 
+impl GameSession {
+    pub async fn next_events(&mut self) -> Result<Vec<Event>> {
+        loop {
+            let raw = self.socket.next_binary_frame().await?;
+            if raw.first().copied() != Some(0x01) {
+                continue;
+            }
+            if let Some(events) = parse_action_notify(&mut self.bridge, &raw)? {
+                return Ok(events);
+            }
+        }
+    }
+
+    pub async fn input_operation(&mut self, req: pb::ReqSelfOperation) -> Result<pb::ResCommon> {
+        self.socket
+            .request(".lq.FastTest.inputOperation", &req)
+            .await
+    }
+
+    pub async fn input_chi_peng_gang(&mut self, req: pb::ReqChiPengGang) -> Result<pb::ResCommon> {
+        self.socket
+            .request(".lq.FastTest.inputChiPengGang", &req)
+            .await
+    }
+
+    pub async fn skip(&mut self) -> Result<pb::ResCommon> {
+        self.input_chi_peng_gang(pb::ReqChiPengGang {
+            cancel_operation: true,
+            timeuse: 2,
+            ..Default::default()
+        })
+        .await
+    }
+}
+
+async fn connect_game_once(
+    account_id: u32,
+    url: &str,
+    request_route: &str,
+    connect_token: &str,
+    game_uuid: &str,
+) -> Result<(GameSession, Vec<Event>)> {
+    let mut socket = LiqiSocket::connect(url).await?;
+    socket
+        .request_raw(
+            ".lq.Route.requestConnection",
+            &route_body(1, request_route, current_time_millis()),
+        )
+        .await?;
+    let auth_raw = socket
+        .request_raw(
+            ".lq.FastTest.authGame",
+            &crate::routes::auth_game_body(account_id, connect_token, game_uuid),
+        )
+        .await?;
+    let (_, body) = response_body(&auth_raw).map_err(|err| anyhow!(err))?;
+    let auth = pb::ResAuthGame::decode(body.as_slice())?;
+    if let Some(error) = auth.error {
+        if error.code != 0 {
+            return Err(anyhow!("authGame failed: code={}", error.code));
+        }
+    }
+    if auth.seat_list.len() != 4 {
+        return Err(anyhow!("authGame returned non-4p seat list"));
+    }
+    let seat = auth
+        .seat_list
+        .iter()
+        .position(|id| *id == account_id)
+        .ok_or_else(|| anyhow!("authGame seat list does not contain account id"))?
+        as u32;
+
+    let mut bridge = Bridge::new(seat);
+    let enter: pb::ResEnterGame = socket
+        .request(".lq.FastTest.enterGame", &pb::ReqCommon {})
+        .await?;
+    let restore = if enter.error.as_ref().is_some_and(|err| err.code != 0) {
+        let sync: pb::ResSyncGame = socket
+            .request(
+                ".lq.FastTest.syncGame",
+                &pb::ReqSyncGame {
+                    round_id: "-1".to_string(),
+                    step: 1_000_000,
+                },
+            )
+            .await?;
+        if let Some(error) = sync.error {
+            if error.code != 0 {
+                return Err(anyhow!("syncGame failed: code={}", error.code));
+            }
+        }
+        sync.game_restore
+    } else {
+        enter.game_restore
+    };
+
+    let mut initial_events = Vec::new();
+    if let Some(restore) = restore {
+        let passed_waiting_time = restore.passed_waiting_time;
+        for action in restore.actions {
+            initial_events.extend(bridge.handle_action_with_waiting(
+                &action.name,
+                &action.data,
+                passed_waiting_time,
+            )?);
+        }
+    }
+
+    let clear: pb::ResCommon = socket
+        .request(".lq.FastTest.clearLeaving", &pb::ReqCommon {})
+        .await?;
+    if let Some(error) = clear.error {
+        if error.code != 0 && error.code != 2 {
+            return Err(anyhow!("clearLeaving failed: code={}", error.code));
+        }
+    }
+
+    Ok((GameSession { socket, bridge }, initial_events))
+}
+
+fn parse_action_notify(bridge: &mut Bridge, raw: &[u8]) -> Result<Option<Vec<Event>>> {
+    let notify = notify_body(raw).map_err(|err| anyhow!(err))?;
+    if matches!(
+        notify.method.as_str(),
+        ".lq.NotifyGameEndResult" | ".lq.NotifyGameTerminate"
+    ) {
+        return Ok(Some(vec![Event::EndGame]));
+    }
+    if notify.method != ".lq.ActionPrototype" {
+        return Ok(None);
+    }
+    let mut action = pb::ActionPrototype::decode(notify.body.as_slice())?;
+    action.data = decode_action_payload(&action.data);
+    Ok(Some(bridge.handle_action(&action.name, &action.data)?))
+}
+
 fn first_lobby_route() -> Result<(String, String)> {
     let (route_id, url) = lobby_ws_url_candidates()
         .into_iter()
@@ -202,11 +519,78 @@ fn current_time_millis() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use liqi::codec::{encode_blocks, ProtoBlock};
 
     #[test]
     fn start_match_payload_uses_current_webgl_client_version() {
         let payload = start_match_payload("1:9".to_string());
         assert_eq!(payload.match_sid, "1:9");
         assert_eq!(payload.client_version_string, "WebGL_2022-0.16.229");
+    }
+
+    #[test]
+    fn action_notify_decodes_xored_action_payload_into_bridge_events() {
+        let action = pb::ActionDiscardTile {
+            seat: 0,
+            tile: "1m".to_string(),
+            moqie: false,
+            ..Default::default()
+        };
+        let mut action_body = Vec::new();
+        action.encode(&mut action_body).unwrap();
+        let proto = pb::ActionPrototype {
+            name: "ActionDiscardTile".to_string(),
+            data: liqi::codec::encode_action_payload(&action_body),
+            ..Default::default()
+        };
+        let mut proto_body = Vec::new();
+        proto.encode(&mut proto_body).unwrap();
+        let raw = [
+            vec![1],
+            encode_blocks(&[
+                ProtoBlock::Bytes {
+                    id: 1,
+                    data: b".lq.ActionPrototype".to_vec(),
+                },
+                ProtoBlock::Bytes {
+                    id: 2,
+                    data: proto_body,
+                },
+            ]),
+        ]
+        .concat();
+
+        let mut bridge = Bridge::new(0);
+        let events = parse_action_notify(&mut bridge, &raw).unwrap().unwrap();
+        assert_eq!(
+            events,
+            vec![Event::Dahai {
+                actor: 0,
+                pai: "1m".to_string(),
+                tsumogiri: false
+            }]
+        );
+    }
+
+    #[test]
+    fn game_end_notify_emits_end_game_like_python_bridge() {
+        let raw = [
+            vec![1],
+            encode_blocks(&[
+                ProtoBlock::Bytes {
+                    id: 1,
+                    data: b".lq.NotifyGameTerminate".to_vec(),
+                },
+                ProtoBlock::Bytes {
+                    id: 2,
+                    data: Vec::new(),
+                },
+            ]),
+        ]
+        .concat();
+
+        let mut bridge = Bridge::new(0);
+        let events = parse_action_notify(&mut bridge, &raw).unwrap().unwrap();
+        assert_eq!(events, vec![Event::EndGame]);
     }
 }

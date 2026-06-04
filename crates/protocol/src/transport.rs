@@ -21,6 +21,7 @@ pub struct LiqiSocket {
 
 impl LiqiSocket {
     pub async fn connect(url: &str) -> Result<Self> {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let mut request = url
             .into_client_request()
             .with_context(|| format!("invalid websocket URL {url}"))?;
@@ -56,7 +57,23 @@ impl LiqiSocket {
         Res::decode(body.as_slice()).with_context(|| format!("decode response for {method}"))
     }
 
+    pub async fn next_binary_frame(&mut self) -> Result<Vec<u8>> {
+        self.read_binary_frame().await
+    }
+
     async fn read_response(&mut self, expected_msg_id: u16) -> Result<Vec<u8>> {
+        loop {
+            let bytes = self.read_binary_frame().await?;
+            if bytes.len() >= 3 && bytes[0] == 0x03 {
+                let msg_id = u16::from_le_bytes([bytes[1], bytes[2]]);
+                if msg_id == expected_msg_id {
+                    return Ok(bytes);
+                }
+            }
+        }
+    }
+
+    async fn read_binary_frame(&mut self) -> Result<Vec<u8>> {
         while let Some(message) = self.ws.next().await {
             let message = message?;
             let bytes = match message {
@@ -70,14 +87,9 @@ impl LiqiSocket {
                 WsMessage::Close(frame) => return Err(anyhow!("websocket closed: {frame:?}")),
                 _ => continue,
             };
-            if bytes.len() >= 3 && bytes[0] == 0x03 {
-                let msg_id = u16::from_le_bytes([bytes[1], bytes[2]]);
-                if msg_id == expected_msg_id {
-                    return Ok(bytes);
-                }
-            }
+            return Ok(bytes);
         }
-        Err(anyhow!("websocket ended before response {expected_msg_id}"))
+        Err(anyhow!("websocket ended before next frame"))
     }
 
     fn alloc_msg_id(&mut self) -> u16 {

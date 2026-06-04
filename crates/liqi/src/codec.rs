@@ -161,6 +161,37 @@ pub fn response_body(raw: &[u8]) -> Result<(u16, Vec<u8>), String> {
     Ok((msg_id, body))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotifyBody {
+    pub method: String,
+    pub body: Vec<u8>,
+}
+
+pub fn notify_body(raw: &[u8]) -> Result<NotifyBody, String> {
+    if raw.is_empty() {
+        return Err("notify frame empty".to_string());
+    }
+    if raw[0] != 0x01 {
+        return Err(format!("expected notify frame type 1, got {}", raw[0]));
+    }
+    let blocks = decode_blocks(&raw[1..])?;
+    let method = blocks
+        .iter()
+        .find_map(|block| match block {
+            ProtoBlock::Bytes { id: 1, data } => Some(String::from_utf8_lossy(data).to_string()),
+            _ => None,
+        })
+        .ok_or_else(|| "notify method block id=1 missing".to_string())?;
+    let body = blocks
+        .into_iter()
+        .find_map(|block| match block {
+            ProtoBlock::Bytes { id: 2, data } => Some(data),
+            _ => None,
+        })
+        .ok_or_else(|| "notify body block id=2 missing".to_string())?;
+    Ok(NotifyBody { method, body })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,5 +282,26 @@ mod tests {
         let (msg_id, body) = response_body(&raw).unwrap();
         assert_eq!(msg_id, 42);
         assert_eq!(body, b"payload");
+    }
+
+    #[test]
+    fn notify_body_extracts_method_and_payload() {
+        let raw = [
+            vec![0x01],
+            encode_blocks(&[
+                ProtoBlock::Bytes {
+                    id: 1,
+                    data: b".lq.NotifyMatchGameStart".to_vec(),
+                },
+                ProtoBlock::Bytes {
+                    id: 2,
+                    data: b"payload".to_vec(),
+                },
+            ]),
+        ]
+        .concat();
+        let notify = notify_body(&raw).unwrap();
+        assert_eq!(notify.method, ".lq.NotifyMatchGameStart");
+        assert_eq!(notify.body, b"payload");
     }
 }

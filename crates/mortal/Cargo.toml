@@ -6,6 +6,10 @@ version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+candle-core.workspace = true
+candle-nn.workspace = true
+mjai = { path = "../mjai" }
+riichi = { package = "riichi-core", path = "../riichi-core" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true

@@ -19,6 +19,8 @@ err.log
 *.pth
 *.onnx
 *.bin
+*.safetensors
+models/
 
 # Settings with credentials
 settings.json

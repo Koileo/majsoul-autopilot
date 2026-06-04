@@ -1,0 +1,27 @@
+[package]
+name = "riichi-core"
+edition.workspace = true
+license = "AGPL-3.0-or-later"
+version.workspace = true
+
+[lib]
+name = "riichi"
+path = "src/lib.rs"
+
+[dependencies]
+ahash = "0.8"
+anyhow.workspace = true
+boomphf = "0.6"
+byteorder = "1"
+derivative = "2"
+derive_more = { version = "2", features = ["add", "add_assign", "sum"] }
+flate2 = "1"
+ndarray = "0.16"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_with = "3"
+tinyvec = { version = "1", features = ["alloc", "serde", "rustc_1_57"] }
+
+[features]
+default = []
+sp_reproduce_cpp_ver = []
