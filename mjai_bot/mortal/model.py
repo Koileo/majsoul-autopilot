@@ -1,5 +1,8 @@
 import json
 import gzip
+import platform
+import shutil
+import sys
 import torch
 import pathlib
 import requests
@@ -13,6 +16,34 @@ from torch.distributions import Normal, Categorical
 from typing import *
 from functools import partial
 from itertools import permutations
+
+
+def _ensure_libriichi_extension() -> None:
+    base_dir = pathlib.Path(__file__).resolve().parent
+    py_tag = f"{sys.version_info.major}.{sys.version_info.minor}"
+    machine = platform.machine().lower()
+    if sys.platform == "darwin":
+        target = "aarch64-apple-darwin" if machine in {"arm64", "aarch64"} else "x86_64-apple-darwin"
+        extension_name = "libriichi.so"
+    elif sys.platform.startswith("linux"):
+        target = "x86_64-unknown-linux-gnu"
+        extension_name = "libriichi.so"
+    elif sys.platform.startswith("win"):
+        target = "x86_64-pc-windows-msvc"
+        extension_name = "libriichi.pyd"
+    else:
+        raise RuntimeError(f"Unsupported platform for libriichi: {sys.platform} {machine}")
+
+    source = base_dir / "libriichi" / f"libriichi-{py_tag}-{target}.{extension_name.rsplit('.', 1)[1]}"
+    destination = base_dir / extension_name
+    if not source.exists():
+        raise FileNotFoundError(f"Missing libriichi binary for {py_tag}/{target}: {source}")
+    if not destination.exists() or source.read_bytes() != destination.read_bytes():
+        shutil.copyfile(source, destination)
+
+
+_ensure_libriichi_extension()
+
 from .libriichi.mjai import Bot
 from .libriichi.consts import obs_shape, oracle_obs_shape, ACTION_SPACE, GRP_SIZE
 from .logger import logger
