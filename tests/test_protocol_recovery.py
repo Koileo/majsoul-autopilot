@@ -775,6 +775,44 @@ class ProtocolRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(sends[0]["moqie"])
         self.assertGreaterEqual(sleeps[0], 10.0)
 
+    async def test_new_round_discard_drops_if_window_changes_during_wait(self):
+        sends = []
+        sleeps = []
+        contexts = [
+            {"source": "ActionNewRound", "seat": 1, "received_monotonic": 100.0},
+            {"source": "ActionTsumo", "seat": 1, "received_monotonic": 112.0},
+        ]
+
+        class ChangedNewRoundAutomation(MajsoulAutomation):
+            async def _send_input_operation(self, params):
+                sends.append(params)
+                return True
+
+        automation = ChangedNewRoundAutomation()
+
+        async def fast_sleep(_seconds):
+            sleeps.append(_seconds)
+            return None
+
+        def fake_last_operation_context():
+            if len(contexts) == 1:
+                return contexts[0]
+            return contexts.pop(0)
+
+        with (
+            patch("autoplay.protocol_automation.asyncio.sleep", fast_sleep),
+            patch("autoplay.protocol_automation.get_last_operation_list", lambda: [{"type": 1}]),
+            patch("autoplay.protocol_automation.get_last_operation_context", fake_last_operation_context),
+            patch("autoplay.protocol_automation.get_last_discard_event", lambda: {"counter": 80}),
+            patch("autoplay.protocol_automation.get_round_end_counter", lambda: 90),
+            patch("autoplay.protocol_automation.time.monotonic", lambda: 100.0),
+        ):
+            result = await automation._send_discard_with_retry("3z", False, seat=1)
+
+        self.assertTrue(result)
+        self.assertEqual(sends, [])
+        self.assertGreaterEqual(sleeps[0], 10.0)
+
     async def test_restored_new_round_dealer_discard_does_not_wait_again(self):
         sends = []
         sleeps = []

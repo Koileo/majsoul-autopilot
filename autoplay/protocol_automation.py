@@ -1842,7 +1842,7 @@ class MajsoulAutomation:
                 and event.get("actor") == seat
                 and 0 <= discard_age <= STALE_SELF_DISCARD_IGNORE_WINDOW
             ):
-                logger.warning(
+                logger.info(
                     f"Stale discard action ignored; self discard already broadcast "
                     f"actor={seat} tile={event.get('tile')} age={discard_age:.1f}s"
                 )
@@ -1855,6 +1855,21 @@ class MajsoulAutomation:
             logger.info("Opening-round discard uses hand-discard mode instead of moqie")
             moqie = False
         await self._wait_for_opening_round_discard_window(op_context)
+        if op_context.get("source") == "ActionNewRound":
+            current_context = get_last_operation_context()
+            current_operations = get_last_operation_list()
+            same_window = (
+                current_context.get("source") == op_context.get("source")
+                and current_context.get("seat") == op_context.get("seat")
+                and current_context.get("received_monotonic") == op_context.get("received_monotonic")
+                and any(op.get("type") == OP_DISCARD for op in current_operations)
+            )
+            if not same_window:
+                logger.info(
+                    "Opening-round discard window changed before submit; "
+                    "dropping stale discard action"
+                )
+                return True
 
         pre_event = get_last_discard_event()
         pre_count = int(pre_event.get("counter") or get_discard_counter())
