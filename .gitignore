@@ -8,6 +8,12 @@ __pycache__/
 target/
 dist/
 
+# Desktop app generated files
+apps/desktop/node_modules/
+apps/desktop/dist/
+apps/desktop/gui-screenshot.png
+apps/desktop/src-tauri/gen/schemas/
+
 # IDE
 .idea/
 
@@ -15,6 +21,7 @@ dist/
 logs/
 *.log
 err.log
+tmp-gemini-*.md
 
 # Model weights
 *.pth

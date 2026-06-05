@@ -1,0 +1,24 @@
+[package]
+name = "majsoul-autopilot-desktop"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lib]
+name = "majsoul_autopilot_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "majsoul-autopilot-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+anyhow.workspace = true
+autoplay = { path = "../../../crates/autoplay" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tauri.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }

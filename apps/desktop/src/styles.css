@@ -1,0 +1,3818 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Hiragino Sans", "Noto Sans JP", "Microsoft YaHei", sans-serif;
+  color: #24313a;
+  background: #eef5f3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #eef5f3;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  height: 34px;
+  border: 1px solid #d6e3df;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #26343d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(34, 52, 60, 0.04);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.primary {
+  background: #1b8f77;
+  border-color: #1b8f77;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+button.danger {
+  border-color: #f0b8ad;
+  color: #b64435;
+  background: #fff7f5;
+}
+
+input,
+select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid #d7e1dd;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #24313a;
+  outline: none;
+}
+
+input:focus,
+select:focus {
+  border-color: #45a9bd;
+  box-shadow: 0 0 0 3px rgba(69, 169, 189, 0.15);
+}
+
+select:disabled {
+  background: #f3f6f5;
+  color: #9aa7a3;
+}
+
+.viewportFrame {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(86, 179, 177, 0.16), transparent 34%),
+    linear-gradient(315deg, rgba(237, 113, 91, 0.08), transparent 32%),
+    #eef5f3;
+}
+
+.appShell {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  display: grid;
+  grid-template-rows: 74px minmax(0, 1fr);
+}
+
+.commandBar {
+  height: 74px;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: minmax(270px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(91, 126, 119, 0.16);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+}
+
+.brandCluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brandMark {
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(27, 143, 119, 0.35);
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 900;
+  background: #1b8f77;
+  box-shadow: 0 8px 20px rgba(27, 143, 119, 0.22);
+}
+
+.brandCluster h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.brandCluster p {
+  margin: 4px 0 0;
+  color: #6c7b78;
+  font-size: 12px;
+}
+
+.languageSwitch {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid #d6e3df;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.languageSwitch svg {
+  color: #1b8f77;
+}
+
+.languageSwitch button {
+  height: 28px;
+  min-width: 62px;
+  border: 0;
+  padding: 0 9px;
+  background: transparent;
+  color: #53645f;
+  box-shadow: none;
+}
+
+.languageSwitch button.active {
+  background: #daf2eb;
+  color: #0f6e5b;
+  font-weight: 800;
+}
+
+.statusBeacon {
+  height: 36px;
+  min-width: 128px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #d6e3df;
+  border-radius: 999px;
+  color: #52635f;
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.status-in_game,
+.status-matching,
+.status-logging_in,
+.status-reconnecting {
+  color: #0f6e5b;
+  border-color: #a8ded1;
+  background: #ecfaf6;
+}
+
+.status-stopping_after_game {
+  color: #8a5b06;
+  border-color: #ead092;
+  background: #fff8df;
+}
+
+.status-error {
+  color: #a73c32;
+  border-color: #efb4ad;
+  background: #fff4f2;
+}
+
+.commandActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cockpit {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 326px minmax(650px, 1fr) 340px;
+  gap: 14px;
+  padding: 14px;
+}
+
+.controlDeck,
+.telemetryRail {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid rgba(91, 126, 119, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 18px 42px rgba(45, 74, 68, 0.12);
+  backdrop-filter: blur(12px);
+}
+
+.controlDeck {
+  padding: 14px;
+}
+
+.panelTitle,
+.telemetryTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+  color: #13836c;
+}
+
+.panelTitle:not(:first-child) {
+  margin-top: 18px;
+}
+
+.accountSnapshot {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid #d6ebe5;
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(221, 246, 238, 0.92), rgba(245, 252, 250, 0.94)),
+    #f7fcfa;
+}
+
+.liveAccount {
+  margin-bottom: 10px;
+}
+
+.accountSnapshot span,
+.accountSnapshot dt {
+  color: #6d7e79;
+  font-size: 11px;
+}
+
+.accountSnapshot strong {
+  display: block;
+  margin-top: 3px;
+  color: #173f36;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountSnapshot small {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #13836c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.accountSnapshot small.isRefreshing {
+  background: #e8f7fb;
+  color: #1d7890;
+}
+
+.accountSnapshot dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin: 0;
+}
+
+.accountSnapshot dl > div {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.accountSnapshot div {
+  min-width: 0;
+}
+
+.accountSnapshot dt,
+.accountSnapshot dd {
+  margin: 0;
+}
+
+.accountSnapshot dd {
+  color: #24313a;
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.panelTitle h2,
+.telemetryTitle h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: #61706d;
+  font-size: 12px;
+}
+
+.field span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.toggleRow {
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #344640;
+  font-size: 12px;
+}
+
+.toggleRow input {
+  width: 16px;
+  height: 16px;
+  accent-color: #1b8f77;
+}
+
+.saveButton {
+  width: 100%;
+  margin-top: 4px;
+  background: #edf8f5;
+  color: #0f6e5b;
+  border-color: #bce6da;
+  font-weight: 800;
+}
+
+.arenaDeck {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 56px 66px minmax(0, 1fr) 118px;
+  gap: 12px;
+}
+
+.phaseBanner {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid #d6e3df;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 18px 42px rgba(45, 74, 68, 0.08);
+}
+
+.phaseBanner span {
+  display: block;
+  color: #6d7e79;
+  font-size: 11px;
+}
+
+.phaseBanner strong {
+  display: block;
+  color: #173f36;
+  font-size: 20px;
+  line-height: 1.05;
+}
+
+.phaseBanner p {
+  margin: 0;
+  color: #52635f;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phaseBanner.status-logging_in,
+.phaseBanner.status-matching,
+.phaseBanner.status-reconnecting,
+.phaseBanner.status-in_game {
+  border-color: #a8ded1;
+  background: linear-gradient(135deg, rgba(235, 250, 246, 0.96), rgba(255, 255, 255, 0.9));
+}
+
+.phaseBanner.status-logging_in strong,
+.phaseBanner.status-matching strong,
+.phaseBanner.status-reconnecting strong,
+.phaseBanner.status-in_game strong {
+  color: #0f6e5b;
+}
+
+.modelStrip {
+  border: 1px solid rgba(91, 126, 119, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 18px 42px rgba(45, 74, 68, 0.1);
+}
+
+.recommendation span {
+  display: block;
+  color: #72807c;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.tableCanvas,
+.gameTable {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid rgba(86, 155, 151, 0.28);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #f7fcfb;
+  box-shadow: 0 20px 46px rgba(35, 91, 103, 0.16);
+}
+
+.gameTable {
+  display: grid;
+  grid-template-rows: 46px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  color: #25343a;
+}
+
+.gameTableEmpty {
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border-color: rgba(83, 158, 166, 0.36);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.38), rgba(219, 249, 247, 0.18) 42%, transparent 68%),
+    linear-gradient(145deg, #c9f1eb 0%, #99dde0 52%, #7acbd9 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.42),
+    inset 0 22px 70px rgba(255, 255, 255, 0.18),
+    0 20px 46px rgba(35, 91, 103, 0.16);
+}
+
+.emptyTablePanel {
+  display: grid;
+  place-items: center;
+  min-width: 150px;
+  min-height: 92px;
+  padding: 18px 24px;
+  border-radius: 14px;
+  color: #d8f0ed;
+  background: linear-gradient(180deg, rgba(29, 58, 73, 0.94), rgba(18, 41, 52, 0.9));
+  box-shadow: 0 16px 34px rgba(15, 42, 54, 0.18);
+}
+
+.emptyTablePanel strong {
+  color: #ffffff;
+  font-size: 20px;
+}
+
+.tableInfoBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid #cfe8e4;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  color: #5f7470;
+}
+
+.tableInfoBar > span {
+  white-space: nowrap;
+}
+
+.doraInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.doraTiles {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tableArea {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 94px minmax(178px, 1fr) 78px;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(83, 158, 166, 0.48);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 36%),
+    radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.32), rgba(219, 249, 247, 0.14) 44%, transparent 68%),
+    linear-gradient(145deg, #b8ebe4 0%, #90d9de 46%, #73c4d6 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.42),
+    inset 0 22px 70px rgba(255, 255, 255, 0.16);
+}
+
+.tableMiddle {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) 136px minmax(190px, 1fr);
+  align-items: stretch;
+  gap: 10px;
+}
+
+.playerArea {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 9px;
+  background: rgba(246, 255, 253, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.playerToimen,
+.playerSelf {
+  align-items: center;
+}
+
+.playerKamicha,
+.playerShimocha {
+  align-items: stretch;
+  display: grid;
+  grid-template-rows: 24px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  gap: 6px 10px;
+  overflow: visible;
+}
+
+.playerKamicha .playerLabel,
+.playerShimocha .playerLabel {
+  grid-column: 1 / -1;
+}
+
+.playerLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 18px;
+  margin-bottom: 1px;
+  color: #5e746f;
+}
+
+.playerName {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #20343c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.playerScore {
+  color: #5e746f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.riichiMark {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #b33333;
+  color: #ffffff;
+  font-size: 12px;
+  font-style: normal;
+  flex: 0 0 auto;
+}
+
+.opponentHand {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-height: 29px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.opponentHandTiles,
+.opponentMelds,
+.melds,
+.handTiles {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.opponentMelds,
+.melds {
+  gap: 8px;
+}
+
+.playerKamicha .opponentHand,
+.playerShimocha .opponentHand {
+  grid-row: 2;
+  min-height: 0;
+  height: 100%;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: visible;
+  padding-top: 4px;
+}
+
+.playerKamicha .opponentHand {
+  grid-column: 1;
+}
+
+.playerShimocha .opponentHand {
+  grid-column: 3;
+}
+
+.playerKamicha .opponentHandTiles,
+.playerShimocha .opponentHandTiles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 34px;
+  height: auto;
+  gap: 0;
+}
+
+.playerKamicha .opponentHandTiles .tile,
+.playerShimocha .opponentHandTiles .tile {
+  margin-bottom: -22px;
+}
+
+.playerKamicha .opponentHandTiles .tile:last-child,
+.playerShimocha .opponentHandTiles .tile:last-child {
+  margin-bottom: 0;
+}
+
+.playerKamicha .opponentHandTiles {
+  margin-left: 0;
+}
+
+.playerKamicha .opponentMelds,
+.playerShimocha .opponentMelds {
+  position: absolute;
+  z-index: 3;
+  bottom: 8px;
+  display: flex;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.playerKamicha .opponentMelds {
+  left: 44px;
+}
+
+.playerShimocha .opponentMelds {
+  right: 44px;
+}
+
+.playerKamicha .discardPile,
+.playerShimocha .discardPile {
+  grid-row: 2;
+  grid-template-columns: repeat(3, 34px);
+  grid-auto-rows: 26px;
+  grid-auto-flow: row;
+  justify-content: start;
+  align-content: start;
+  min-height: 0;
+  max-height: 156px;
+  overflow: visible;
+  gap: 3px 5px;
+}
+
+.playerKamicha .discardPile {
+  grid-column: 2 / 4;
+}
+
+.playerShimocha .discardPile {
+  grid-column: 1 / 3;
+  justify-self: end;
+}
+
+.playerKamicha .discardPile .tile,
+.playerShimocha .discardPile .tile {
+  transform: rotate(90deg);
+  transform-origin: center;
+}
+
+.playerKamicha .discardPile .tileSideways,
+.playerShimocha .discardPile .tileSideways {
+  transform: rotate(0deg);
+}
+
+.discardPile {
+  display: grid;
+  grid-template-columns: repeat(6, 22px);
+  grid-auto-rows: 31px;
+  gap: 2px;
+  justify-content: start;
+  align-content: start;
+  width: 142px;
+  min-height: 97px;
+}
+
+.playerToimen .discardPile,
+.playerSelf .discardPile {
+  justify-content: center;
+}
+
+.playerSelf .discardPile {
+  min-height: 45px;
+}
+
+.tableCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.centerInfo {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  width: 168px;
+  max-width: calc(100% - 24px);
+  padding: 10px 10px;
+  border: 1px solid rgba(139, 218, 211, 0.62);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(29, 58, 73, 0.94), rgba(18, 41, 52, 0.9));
+  color: #d6ece9;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 12px 28px rgba(15, 42, 54, 0.2);
+}
+
+.centerInfo strong {
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.centerInfo span {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.centerDoraInfo {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(214, 236, 233, 0.16);
+}
+
+.centerDoraInfo b {
+  color: rgba(214, 236, 233, 0.78);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.centerDoraTiles {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  max-width: 132px;
+}
+
+.centerDoraTiles .tile {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 28px;
+}
+
+.handArea {
+  padding: 10px 12px;
+  border: 1px solid #cfe8e4;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.handContainer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  max-width: 100%;
+}
+
+.handTiles {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.tsumoGap {
+  flex: 0 0 10px;
+}
+
+.meld {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 45px;
+  border: 1px solid #c8d8d5;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(29, 58, 73, 0.16),
+    0 5px 12px rgba(29, 58, 73, 0.08);
+  overflow: hidden;
+  user-select: none;
+}
+
+.tileSmall {
+  width: 22px;
+  height: 31px;
+}
+
+.tileBack {
+  border-color: rgba(16, 49, 71, 0.66);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 36%),
+    linear-gradient(145deg, #214768, #142b46);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 2px 4px rgba(18, 41, 52, 0.18);
+}
+
+.tileBackInner {
+  width: calc(100% - 5px);
+  height: calc(100% - 5px);
+  border-radius: 3px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), transparent 45%),
+    #183454;
+  box-shadow: inset 0 0 0 1px rgba(129, 202, 214, 0.22);
+}
+
+.tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  transform: none;
+}
+
+.tileSideways {
+  transform: rotate(90deg);
+  transform-origin: center;
+}
+
+.tileFaded {
+  opacity: 1;
+  filter: none;
+}
+
+/* Mahjong table layout: absolute seats prevent side hands/rivers from pushing each other around. */
+.tableArea {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-height: 340px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.tableCenterAbsolute {
+  position: absolute;
+  z-index: 10;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.playerSeat {
+  position: absolute;
+  z-index: 2;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 9px;
+  color: #20343c;
+}
+
+.playerToimen,
+.playerSelf {
+  left: 50%;
+  width: min(62%, 470px);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+}
+
+.playerToimen {
+  top: 10px;
+}
+
+.playerSelf {
+  bottom: 10px;
+}
+
+.playerKamicha,
+.playerShimocha {
+  top: 50%;
+  width: min(38%, 276px);
+  height: 190px;
+  transform: translateY(-50%);
+  display: grid;
+  grid-template-rows: 24px minmax(0, 1fr);
+  gap: 6px 10px;
+  padding: 5px 6px;
+  background: rgba(246, 255, 253, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.playerKamicha {
+  left: 12px;
+  grid-template-columns: 30px minmax(0, 1fr);
+}
+
+.playerShimocha {
+  right: 12px;
+  grid-template-columns: minmax(0, 1fr) 30px;
+}
+
+.playerKamicha .playerLabel,
+.playerShimocha .playerLabel {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.playerShimocha .playerLabel {
+  justify-content: flex-end;
+}
+
+.playerKamicha .opponentHand,
+.playerShimocha .opponentHand {
+  grid-row: 2;
+  width: 30px;
+  height: 100%;
+  min-height: 0;
+  padding-top: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: visible;
+}
+
+.playerKamicha .opponentHand {
+  grid-column: 1;
+}
+
+.playerShimocha .opponentHand {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.playerKamicha .opponentHandTiles,
+.playerShimocha .opponentHandTiles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 22px;
+  gap: 0;
+}
+
+.playerKamicha .opponentHandTiles .tile,
+.playerShimocha .opponentHandTiles .tile {
+  margin-bottom: -18px;
+}
+
+.playerKamicha .opponentHandTiles .tile:last-child,
+.playerShimocha .opponentHandTiles .tile:last-child {
+  margin-bottom: 0;
+}
+
+.opponentTsumo {
+  flex: 0 0 auto;
+  margin-left: 5px;
+}
+
+.playerKamicha .opponentTsumo,
+.playerShimocha .opponentTsumo {
+  margin-left: 0;
+  margin-top: 8px;
+}
+
+.playerKamicha .discardPile,
+.playerShimocha .discardPile {
+  grid-row: 2;
+  display: grid;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  transform-origin: center center;
+}
+
+.playerKamicha .discardPile {
+  grid-column: 2;
+  justify-self: start;
+  align-self: center;
+  margin-left: 42px;
+  transform: rotate(90deg);
+}
+
+.playerShimocha .discardPile {
+  grid-column: 1;
+  justify-self: end;
+  align-self: center;
+  margin-right: 42px;
+  transform: rotate(-90deg);
+}
+
+.playerKamicha .discardPile .tile,
+.playerShimocha .discardPile .tile {
+  transform: none;
+}
+
+.playerKamicha .discardPile .tileSideways,
+.playerShimocha .discardPile .tileSideways {
+  transform: rotate(90deg);
+}
+
+.playerToimen .opponentHand {
+  justify-content: center;
+}
+
+.playerToimen .opponentHandTiles {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.playerToimen .discardPile,
+.playerSelf .discardPile {
+  display: grid;
+  grid-template-columns: repeat(6, auto);
+  justify-content: center;
+  align-content: start;
+  min-height: 42px;
+}
+
+.handContainer {
+  justify-content: center;
+  width: 100%;
+}
+
+.handLeft {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+}
+
+.handTiles {
+  flex: 0 1 auto;
+}
+
+.tsumoContainer {
+  flex: 0 0 auto;
+  margin-left: 14px;
+}
+
+.handMeldsRight {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-left: 18px;
+}
+
+/* Final river layout: rivers are independent objects around the center panel. */
+.tableCenterAbsolute {
+  width: 168px;
+  height: 146px;
+}
+
+.centerInfo {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 10px 10px;
+  text-align: center;
+}
+
+.centerInfo strong {
+  line-height: 1.08;
+}
+
+.centerInfo > span:not(.centerDoraInfo) {
+  line-height: 1.05;
+}
+
+.discardPile {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(6, 31px);
+  grid-auto-rows: 31px;
+  gap: 2px 1px;
+  width: 191px;
+  min-height: 97px;
+  transform-origin: center center;
+}
+
+.discardPile .tile {
+  justify-self: center;
+  align-self: center;
+}
+
+.discardPile .tileSideways {
+  justify-self: center;
+  align-self: center;
+}
+
+.riverSelf {
+  left: 50%;
+  top: calc(50% + 70px);
+  transform: translateX(-50%);
+}
+
+.riverToimen {
+  left: 50%;
+  bottom: calc(50% + 70px);
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.riverKamicha {
+  top: 50%;
+  right: calc(50% + 70px);
+  width: 127px;
+  height: 190px;
+  grid-template-columns: none;
+  grid-template-rows: repeat(6, 31px);
+  grid-auto-flow: column;
+  grid-auto-columns: 31px;
+  justify-content: end;
+  direction: rtl;
+  transform: translateY(-50%);
+}
+
+.riverShimocha {
+  top: 50%;
+  left: calc(50% + 70px);
+  width: 127px;
+  height: 190px;
+  grid-template-columns: none;
+  grid-template-rows: repeat(6, 31px);
+  grid-auto-flow: column;
+  grid-auto-columns: 31px;
+  justify-content: start;
+  transform: translateY(-50%);
+}
+
+.riverKamicha .tile {
+  direction: ltr;
+  transform: rotate(90deg);
+}
+
+.riverShimocha .tile {
+  transform: rotate(-90deg);
+}
+
+.riverKamicha .tileSideways,
+.riverShimocha .tileSideways {
+  transform: rotate(0deg);
+}
+
+.riverSelf.riverOverflow {
+  top: calc(50% + 58px);
+  transform: translateX(-50%) scale(0.5);
+  transform-origin: top center;
+}
+
+.riverToimen.riverOverflow {
+  bottom: calc(50% + 58px);
+  transform: translateX(-50%) rotate(180deg) scale(0.5);
+  transform-origin: bottom center;
+}
+
+.riverKamicha.riverOverflow {
+  right: calc(50% + 76px);
+  transform: translateY(-50%) scale(0.5);
+  transform-origin: center right;
+}
+
+.riverShimocha.riverOverflow {
+  left: calc(50% + 76px);
+  transform: translateY(-50%) scale(0.5);
+  transform-origin: center left;
+}
+
+.playerKamicha,
+.playerShimocha {
+  display: flex;
+  flex-direction: column;
+  grid-template-rows: none;
+  grid-template-columns: none;
+  width: auto;
+  height: auto;
+  min-width: 48px;
+  min-height: 180px;
+  gap: 8px;
+  padding: 7px 8px;
+}
+
+.playerKamicha {
+  left: 12px;
+  align-items: flex-start;
+}
+
+.playerShimocha {
+  right: 12px;
+  align-items: flex-end;
+}
+
+.playerKamicha .playerLabel,
+.playerShimocha .playerLabel {
+  grid-column: auto;
+}
+
+.playerKamicha .opponentHand,
+.playerShimocha .opponentHand {
+  width: auto;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 0;
+}
+
+.playerKamicha .opponentHandTiles,
+.playerShimocha .opponentHandTiles {
+  width: 22px;
+}
+
+.playerKamicha .opponentHandTiles .tile,
+.playerShimocha .opponentHandTiles .tile {
+  margin-bottom: -18px;
+}
+
+.playerKamicha .opponentMelds,
+.playerShimocha .opponentMelds {
+  position: static;
+  display: flex;
+  gap: 5px;
+  pointer-events: auto;
+}
+
+.playerKamicha .opponentTsumo,
+.playerShimocha .opponentTsumo {
+  margin-top: 8px;
+}
+
+.modelStrip {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+}
+
+.recommendation strong {
+  display: block;
+  margin-bottom: 7px;
+  color: #0f6e5b;
+  font-size: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recommendation small {
+  color: #72807c;
+  font-size: 12px;
+}
+
+.candidateTrack {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.candidateRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr) 54px;
+  gap: 10px;
+  align-items: center;
+  color: #344640;
+  font-size: 12px;
+}
+
+.candidateRow span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confidenceBar {
+  height: 7px;
+  border-radius: 999px;
+  background: #dce9e5;
+  overflow: hidden;
+}
+
+.confidenceBar i {
+  display: block;
+  height: 100%;
+  background: #45a9bd;
+}
+
+.candidateRow code,
+.eventStream code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.telemetryRail {
+  min-height: 0;
+  padding: 12px;
+  display: grid;
+  grid-template-rows: 332px minmax(150px, 1fr) minmax(150px, 1fr);
+  gap: 12px;
+  overflow: hidden;
+}
+
+.telemetryBlock {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #e0ebe7;
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(250, 253, 252, 0.72);
+}
+
+.playersBlock {
+  height: 332px;
+}
+
+.eventsBlock,
+.logsBlock {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.playerLine {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 40px 52px;
+  gap: 7px;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 7px;
+  border-radius: 8px;
+  background: rgba(242, 247, 245, 0.74);
+  color: #61706d;
+  font-size: 12px;
+}
+
+.playerLine + .playerLine {
+  margin-top: 5px;
+}
+
+.playerLine strong {
+  color: #26343d;
+  font-size: 13px;
+}
+
+.playerLine em {
+  color: #13836c;
+  font-style: normal;
+}
+
+.playerLine small {
+  color: #c77b1f;
+}
+
+.eventStream {
+  min-height: 0;
+  overflow: auto;
+}
+
+.eventStream code {
+  display: block;
+  white-space: pre-wrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border-radius: 7px;
+  background: #f2f7f5;
+  color: #61706d;
+  font-size: 11px;
+}
+
+.logList p {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 0 0 8px;
+  color: #61706d;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.logList {
+  min-height: 0;
+  overflow: auto;
+}
+
+.logList .log-warn {
+  color: #9a6508;
+}
+
+.logList .log-error {
+  color: #b64435;
+}
+
+.confirmOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(31, 48, 56, 0.34);
+  backdrop-filter: blur(8px);
+}
+
+.confirmDialog {
+  width: min(430px, calc(100% - 48px));
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(240, 184, 173, 0.86);
+  border-radius: 14px;
+  background: #fffdf9;
+  box-shadow: 0 24px 60px rgba(31, 48, 56, 0.26);
+}
+
+.confirmIcon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff0ec;
+  color: #b64435;
+}
+
+.confirmDialog h2 {
+  margin: 0 0 6px;
+  color: #26343d;
+  font-size: 18px;
+}
+
+.confirmDialog p {
+  margin: 0;
+  color: #61706d;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.confirmActions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+/* Gemini-informed table pass: compact rivers, physical riichi tiles, directional melds. */
+.tileSideways {
+  width: 45px;
+  height: 32px;
+  transform: none;
+  position: relative;
+}
+
+.tileSmall.tileSideways {
+  width: 31px;
+  height: 22px;
+}
+
+.tileSideways img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 32px;
+  height: 45px;
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center;
+  object-fit: contain;
+}
+
+.tileSmall.tileSideways img {
+  width: 22px;
+  height: 31px;
+}
+
+.tileSideways.tileBack .tileBackInner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 41px;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.tileSmall.tileSideways.tileBack .tileBackInner {
+  width: 18px;
+  height: 27px;
+}
+
+.discardPile {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  min-height: 0;
+  height: max-content;
+  transform-origin: center center;
+}
+
+.discardRow {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.discardPile .tile,
+.discardPile .tileSideways {
+  justify-self: auto;
+  align-self: auto;
+}
+
+.riverSelf {
+  left: 50%;
+  top: calc(50% + 66px);
+  transform: translateX(-50%);
+}
+
+.riverToimen {
+  left: 50%;
+  bottom: calc(50% + 66px);
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.riverKamicha {
+  top: 50%;
+  right: calc(50% + 66px);
+  width: max-content;
+  height: max-content;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  direction: ltr;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+.riverShimocha {
+  top: 50%;
+  left: calc(50% + 66px);
+  width: max-content;
+  height: max-content;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+.riverKamicha .tile,
+.riverShimocha .tile,
+.riverKamicha .tileSideways,
+.riverShimocha .tileSideways {
+  transform: none;
+}
+
+.riverKamicha .tileSideways,
+.riverShimocha .tileSideways {
+  margin-inline: 4px;
+}
+
+.riverSelf.riverOverflow {
+  top: calc(50% + 92px);
+  transform: translateX(-50%) scale(0.34);
+  transform-origin: top center;
+}
+
+.riverToimen.riverOverflow {
+  bottom: calc(50% + 104px);
+  transform: translateX(-50%) rotate(180deg) scale(0.34);
+  transform-origin: bottom center;
+}
+
+.riverKamicha.riverOverflow {
+  right: calc(50% + 118px);
+  transform: translateY(-50%) rotate(90deg) scale(0.42);
+  transform-origin: center right;
+}
+
+.riverShimocha.riverOverflow {
+  left: calc(50% + 118px);
+  transform: translateY(-50%) rotate(-90deg) scale(0.42);
+  transform-origin: center left;
+}
+
+.opponentHand-toimen {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 14px;
+  overflow: visible;
+}
+
+.opponentHand-toimen .opponentHandTiles {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 2px;
+  width: auto;
+}
+
+.opponentHand-toimen .opponentMelds {
+  position: static;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.playerKamicha,
+.playerShimocha {
+  top: 50%;
+  width: auto;
+  height: auto;
+  min-width: 48px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 9px;
+}
+
+.playerKamicha {
+  left: 12px;
+  align-items: flex-start;
+}
+
+.playerShimocha {
+  right: 12px;
+  align-items: flex-end;
+}
+
+.opponentHand-kamicha,
+.opponentHand-shimocha {
+  display: grid;
+  column-gap: 8px;
+  width: auto;
+  height: auto;
+  padding-top: 0;
+  overflow: visible;
+}
+
+.opponentHand-kamicha {
+  grid-template-columns: 22px auto;
+  align-items: start;
+}
+
+.opponentHand-shimocha {
+  grid-template-columns: auto 22px;
+  align-items: start;
+}
+
+.opponentHand-kamicha .opponentHandTiles,
+.opponentHand-shimocha .opponentHandTiles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 22px;
+  gap: 0;
+}
+
+.opponentHand-kamicha .opponentHandTiles {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.opponentHand-shimocha .opponentHandTiles {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.opponentHand-kamicha .opponentHandTiles .tile,
+.opponentHand-shimocha .opponentHandTiles .tile {
+  margin-bottom: -18px;
+}
+
+.opponentHand-kamicha .opponentHandTiles .tile:last-child,
+.opponentHand-shimocha .opponentHandTiles .tile:last-child {
+  margin-bottom: 0;
+}
+
+.opponentHand-kamicha .opponentTsumo,
+.opponentHand-shimocha .opponentTsumo {
+  margin: 8px 0 0;
+}
+
+.opponentHand-kamicha .opponentTsumo {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.opponentHand-shimocha .opponentTsumo {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.opponentHand-kamicha .opponentMelds,
+.opponentHand-shimocha .opponentMelds {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  pointer-events: auto;
+}
+
+.opponentHand-kamicha .opponentMelds {
+  grid-column: 2;
+  grid-row: 1;
+  align-items: flex-start;
+}
+
+.opponentHand-shimocha .opponentMelds {
+  grid-column: 1;
+  grid-row: 1;
+  align-items: flex-end;
+}
+
+.handMeldsRight {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 12px;
+  margin-left: 18px;
+}
+
+/* Square felt pass: use vertical room for the table instead of a wide shallow rectangle. */
+.arenaDeck {
+  grid-template-rows: 46px 52px minmax(0, 1fr) 90px;
+  gap: 8px;
+}
+
+.phaseBanner {
+  padding: 8px 12px;
+}
+
+.phaseBanner strong {
+  font-size: 18px;
+}
+
+.modelStrip {
+  min-height: 0;
+  padding: 10px 12px;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.recommendation strong {
+  margin-bottom: 4px;
+  font-size: 20px;
+}
+
+.candidateTrack {
+  gap: 5px;
+}
+
+.gameTable {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+
+.gameTable .tableInfoBar {
+  display: none;
+}
+
+.gameTable .tableInfoBar > span:not(.doraInfo) {
+  display: none;
+}
+
+.gameTable .doraInfo {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  white-space: normal;
+}
+
+.gameTable .doraTiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 170px;
+}
+
+.gameTable .doraTiles .tile {
+  flex: 0 0 auto;
+}
+
+.gameTable .tableArea {
+  justify-self: center;
+  align-self: center;
+  height: 100%;
+  width: auto;
+  aspect-ratio: 1 / 1;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.gameTable .handArea {
+  flex: 0 0 auto;
+}
+
+/* Move runtime status to the right rail and let the table own the center column. */
+.arenaDeck {
+  grid-template-rows: minmax(0, 1fr) 90px;
+  gap: 8px;
+}
+
+.telemetryRail {
+  grid-template-rows: 98px 350px minmax(116px, 1fr) minmax(116px, 1fr);
+  gap: 10px;
+}
+
+.telemetryRail > .phaseBanner {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.telemetryRail > .phaseBanner strong {
+  font-size: 18px;
+}
+
+.telemetryRail > .phaseBanner p {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+/* Final table placement pass: hands stay outer, rivers tuck toward the table center. */
+.riverSelf {
+  top: calc(50% + 62px);
+}
+
+.riverToimen {
+  bottom: calc(50% + 62px);
+}
+
+.riverKamicha {
+  right: calc(50% + 36px);
+}
+
+.riverShimocha {
+  left: calc(50% + 48px);
+}
+
+.riverSelf.riverOverflow {
+  top: calc(50% + 128px);
+  transform: translateX(-50%) scale(0.5);
+}
+
+.riverToimen.riverOverflow {
+  bottom: calc(50% + 128px);
+  transform: translateX(-50%) rotate(180deg) scale(0.5);
+}
+
+.riverKamicha.riverOverflow {
+  right: calc(50% + 88px);
+}
+
+.riverShimocha.riverOverflow {
+  left: calc(50% + 88px);
+}
+
+.playersBlock {
+  height: auto;
+  overflow: auto;
+}
+
+/* Fixed river slots: each discard index owns a stable coordinate around the center panel. */
+.discardPile,
+.riverSelf,
+.riverToimen,
+.riverKamicha,
+.riverShimocha,
+.riverSelf.riverOverflow,
+.riverToimen.riverOverflow,
+.riverKamicha.riverOverflow,
+.riverShimocha.riverOverflow {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  width: 0;
+  height: 0;
+  min-height: 0;
+  display: block;
+  overflow: visible;
+  transform: none;
+  transform-origin: center center;
+}
+
+.riverTileSlot {
+  position: absolute;
+  width: 24px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  transform-origin: center center;
+}
+
+.riverTileSlot .tile {
+  position: relative;
+  z-index: 1;
+}
+
+.riverRiichiSlot::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 5px;
+  background: rgba(181, 71, 66, 0.1);
+}
+
+/* Tight production cockpit pass: keep four player rows visible and give the table more width. */
+.cockpit {
+  grid-template-columns: 306px minmax(700px, 1fr) 326px;
+  gap: 12px;
+  padding: 12px;
+}
+
+.telemetryRail {
+  grid-template-rows: 100px 392px minmax(110px, 1fr) minmax(110px, 1fr);
+  gap: 8px;
+  padding: 10px;
+}
+
+.telemetryBlock {
+  padding: 10px;
+}
+
+.playersBlock {
+  height: auto;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto auto repeat(4, 24px);
+  align-content: start;
+  gap: 4px;
+}
+
+.playersBlock .telemetryTitle {
+  margin-bottom: 4px;
+}
+
+.playersBlock .liveAccount {
+  margin-bottom: 4px;
+}
+
+.playersBlock .playerLine {
+  min-height: 24px;
+  padding: 3px 7px;
+}
+
+.playersBlock .playerLine + .playerLine {
+  margin-top: 0;
+}
+
+.arenaDeck {
+  grid-template-rows: minmax(0, 1fr) 82px;
+  gap: 6px;
+}
+
+.gameTable {
+  padding: 8px;
+}
+
+.modelStrip {
+  padding: 8px 12px;
+}
+
+.roundResultBanner {
+  position: absolute;
+  z-index: 16;
+  left: 50%;
+  top: calc(50% - 116px);
+  min-width: 210px;
+  max-width: 390px;
+  padding: 10px 14px;
+  border: 1px solid rgba(167, 214, 205, 0.82);
+  border-radius: 12px;
+  text-align: center;
+  color: #eaf8f5;
+  background: linear-gradient(180deg, rgba(28, 75, 86, 0.94), rgba(18, 45, 56, 0.92));
+  box-shadow: 0 16px 32px rgba(15, 42, 54, 0.18);
+  transform: translateX(-50%);
+}
+
+.roundResultBanner strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.roundResultBanner span {
+  display: block;
+  margin-top: 5px;
+  color: rgba(234, 248, 245, 0.82);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.roundResultBanner em {
+  display: inline-flex;
+  margin-top: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #ffe6c3;
+  background: rgba(154, 82, 38, 0.34);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.winningHandReveal {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 240, 203, 0.2);
+}
+
+.winningHandReveal b {
+  display: block;
+  margin-bottom: 4px;
+  color: rgba(234, 248, 245, 0.7);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.winningHandReveal div {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.winningHandReveal .tile {
+  width: 19px;
+  height: 27px;
+}
+
+.roundResultWin {
+  border-color: rgba(235, 198, 119, 0.76);
+  background: linear-gradient(180deg, rgba(68, 53, 30, 0.95), rgba(32, 47, 54, 0.93));
+}
+
+.meldAnkan .tileBack:first-child,
+.meldAnkan .tileBack:last-child {
+  filter: saturate(0.92);
+}
+
+.opponentHand-toimen {
+  flex-direction: row-reverse;
+}
+
+.opponentHand-toimen .opponentMelds {
+  margin-right: 6px;
+  margin-left: 0;
+}
+
+.opponentHand-kamicha,
+.opponentHand-shimocha {
+  grid-template-columns: 22px;
+  grid-template-rows: auto auto auto;
+  justify-items: center;
+}
+
+.opponentHand-kamicha .opponentHandTiles,
+.opponentHand-shimocha .opponentHandTiles {
+  grid-column: 1;
+}
+
+.opponentHand-kamicha .opponentHandTiles {
+  grid-row: 1;
+}
+
+.opponentHand-kamicha .opponentTsumo {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.opponentHand-kamicha .opponentMelds {
+  grid-column: 1;
+  grid-row: 3;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.opponentHand-shimocha .opponentMelds {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0 0 10px;
+  align-items: center;
+}
+
+.opponentHand-shimocha .opponentHandTiles {
+  grid-row: 2;
+}
+
+.opponentHand-shimocha .opponentTsumo {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.playerKamicha .opponentHand-kamicha,
+.playerShimocha .opponentHand-shimocha {
+  display: grid;
+  width: auto;
+  height: auto;
+  gap: 8px;
+  overflow: visible;
+}
+
+.playerKamicha .opponentHand-kamicha {
+  grid-template-columns: 22px;
+  grid-template-rows: auto auto auto;
+}
+
+.playerShimocha .opponentHand-shimocha {
+  grid-template-columns: 22px;
+  grid-template-rows: auto auto auto;
+}
+
+.playerKamicha {
+  left: 34px;
+}
+
+.playerShimocha {
+  right: 34px;
+}
+
+.opponentHand-kamicha,
+.opponentHand-shimocha {
+  grid-template-columns: 31px;
+  gap: 7px;
+}
+
+.playerKamicha .opponentHand-kamicha,
+.playerShimocha .opponentHand-shimocha {
+  grid-template-columns: 31px;
+}
+
+.playerKamicha .opponentHandTiles,
+.playerShimocha .opponentHandTiles {
+  width: 31px;
+  gap: 0;
+}
+
+.playerKamicha .opponentHandTiles .tile,
+.playerShimocha .opponentHandTiles .tile {
+  margin-bottom: -7px;
+}
+
+.playerKamicha .opponentHandTiles .tile:last-child,
+.playerShimocha .opponentHandTiles .tile:last-child {
+  margin-bottom: 0;
+}
+
+.playerKamicha .opponentTsumo,
+.playerShimocha .opponentTsumo {
+  margin-top: 7px;
+}
+
+.playerKamicha .opponentMelds,
+.playerShimocha .opponentMelds {
+  gap: 4px;
+}
+
+.playerKamicha .opponentMelds {
+  transform: translateX(42px);
+}
+
+.playerShimocha .opponentMelds {
+  transform: translateX(-50px);
+}
+
+.playerKamicha .opponentMelds .meld,
+.playerShimocha .opponentMelds .meld {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.playerKamicha .opponentMelds .meldSideways > .tile,
+.playerShimocha .opponentMelds .meldSideways > .tile {
+  margin-bottom: 2px;
+}
+
+.playerKamicha .opponentMelds .meldSideways > .tile:last-child,
+.playerShimocha .opponentMelds .meldSideways > .tile:last-child,
+.playerKamicha .opponentMelds .meldSideways > .calledTileWrapper:last-child,
+.playerShimocha .opponentMelds .meldSideways > .calledTileWrapper:last-child {
+  margin-bottom: 0;
+}
+
+.playerKamicha .opponentMelds .meldSideways > .calledTileWrapper,
+.playerShimocha .opponentMelds .meldSideways > .calledTileWrapper {
+  margin: 0 0 2px;
+}
+
+.calledTileWrapper {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 31px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  margin: 0 3px;
+}
+
+.calledTileWrapper > .tile {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center;
+}
+
+.kakanCalledStack {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 31px;
+  height: 46px;
+  overflow: visible;
+  margin: 0 1px;
+}
+
+.kakanCalledStack > .tile {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  z-index: 2;
+  margin: 0;
+  transform: translateX(-50%);
+}
+
+.kakanAddedTile {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  transform-origin: center;
+  filter: drop-shadow(0 2px 3px rgba(18, 41, 52, 0.18));
+}
+
+.kakanAddedTile .tile {
+  margin: 0;
+}
+
+.meldKakan {
+  overflow: visible;
+}
+
+.handMeldsRight .meldKakan:not(.meldSideways) .kakanCalledStack {
+  width: 45px;
+  height: 66px;
+  margin-top: 0;
+}
+
+.handMeldsRight .meldKakan:not(.meldSideways) .kakanAddedTile {
+  left: 50%;
+  top: 0;
+}
+
+.meldKakan.meldSideways .kakanCalledStack {
+  margin-bottom: 2px;
+}
+
+.meldKakan.meldSideways .kakanAddedTile {
+  left: 50%;
+  top: 0;
+}
+
+.playerKamicha .opponentMelds .kakanCalledStack,
+.playerShimocha .opponentMelds .kakanCalledStack {
+  width: 31px;
+  height: 22px;
+  margin: 22px 0 2px;
+}
+
+.playerKamicha .opponentMelds .kakanCalledStack > .tile,
+.playerShimocha .opponentMelds .kakanCalledStack > .tile {
+  bottom: 0;
+}
+
+.playerKamicha .opponentMelds .kakanCalledStack .kakanAddedTile,
+.playerShimocha .opponentMelds .kakanCalledStack .kakanAddedTile {
+  top: -22px;
+}
+
+/* Final side-seat override: concealed tiles should read as individual tiles, not a compressed stack. */
+.playerKamicha .opponentHandTiles .tile,
+.playerShimocha .opponentHandTiles .tile,
+.opponentHand-kamicha .opponentHandTiles .tile,
+.opponentHand-shimocha .opponentHandTiles .tile {
+  margin-bottom: 0;
+}
+
+.playerKamicha .opponentHandTiles .tile:last-child,
+.playerShimocha .opponentHandTiles .tile:last-child,
+.opponentHand-kamicha .opponentHandTiles .tile:last-child,
+.opponentHand-shimocha .opponentHandTiles .tile:last-child {
+  margin-bottom: 0;
+}
+
+/* Final semantic table polish: winds, hule details, and side-hand/meld geometry. */
+.seatWindTag {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid rgba(19, 131, 108, 0.22);
+  border-radius: 999px;
+  color: #0f6e5b;
+  background: rgba(236, 250, 246, 0.82);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.winningFanList,
+.winningMeldReveal {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 240, 203, 0.18);
+}
+
+.winningFanList b,
+.winningMeldReveal b {
+  display: block;
+  margin-bottom: 4px;
+  color: rgba(234, 248, 245, 0.72);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.winningFanList div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 8px;
+}
+
+.winningFanList span {
+  display: inline-flex;
+  margin: 0;
+  color: rgba(234, 248, 245, 0.86);
+  font-size: 11px;
+}
+
+.winningMeldReveal div {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.winningMeldReveal .meld {
+  gap: 1px;
+}
+
+.winningMeldReveal .tile {
+  width: 19px;
+  height: 27px;
+}
+
+.winningMeldReveal .tileSideways {
+  width: 27px;
+  height: 19px;
+}
+
+.winningMeldReveal .tileSmall.tileSideways img {
+  width: 19px;
+  height: 27px;
+}
+
+.calledTileWrapper {
+  width: 31px;
+  height: 22px;
+  margin: 0 0 2px;
+}
+
+.calledTileWrapper > .tile {
+  position: static;
+  transform: none;
+}
+
+.playerKamicha .opponentMelds .tileSideways img {
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.playerShimocha .opponentMelds .tileSideways img {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.playerKamicha .opponentMelds .tileSideways.tileBack .tileBackInner {
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.playerShimocha .opponentMelds .tileSideways.tileBack .tileBackInner {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.playerToimen .opponentMelds .tile:not(.tileBack):not(.tileSideways) img {
+  transform: rotate(180deg);
+}
+
+.playerToimen .opponentMelds .tileSideways img {
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.opponentHand-shimocha,
+.playerShimocha .opponentHand-shimocha {
+  grid-template-columns: 31px 31px;
+  grid-template-rows: auto auto;
+}
+
+.opponentHand-shimocha .opponentMelds,
+.playerShimocha .opponentHand-shimocha .opponentMelds {
+  grid-column: 1 / 3;
+  grid-row: 1;
+  justify-self: center;
+  margin: 0 0 9px;
+}
+
+.opponentHand-shimocha .opponentHandTiles,
+.playerShimocha .opponentHand-shimocha .opponentHandTiles {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.opponentHand-shimocha .opponentTsumo,
+.playerShimocha .opponentHand-shimocha .opponentTsumo {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: end;
+  margin: 0 0 0 5px;
+}
+
+.riverOverflow .riverTileSlot {
+  scale: 0.68;
+}
+
+/* Final seat-perspective pass.
+   Hands/melds are laid out exactly like the self hand, then the whole group is
+   rotated to the player's side. This keeps tile faces and called-tile indicators
+   in one local coordinate system instead of mixing per-tile rotations. */
+.playerToimen .opponentHand,
+.playerKamicha .opponentHand,
+.playerShimocha .opponentHand,
+.opponentHand-toimen,
+.opponentHand-kamicha,
+.opponentHand-shimocha {
+  position: absolute !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  width: max-content !important;
+  height: max-content !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  overflow: visible !important;
+  gap: 10px !important;
+  padding: 0 !important;
+  transform-origin: center center !important;
+}
+
+.playerToimen .opponentHand {
+  left: 50% !important;
+  top: 44px !important;
+  transform: translateX(-50%) rotate(180deg) !important;
+}
+
+.playerKamicha .opponentHand {
+  left: 50% !important;
+  top: calc(50% + 10px) !important;
+  transform: translate(-50%, -50%) rotate(-90deg) !important;
+}
+
+.playerShimocha .opponentHand {
+  left: 50% !important;
+  right: auto !important;
+  top: calc(50% + 10px) !important;
+  transform: translate(-50%, -50%) rotate(90deg) !important;
+}
+
+.playerToimen .opponentHandTiles,
+.playerKamicha .opponentHandTiles,
+.playerShimocha .opponentHandTiles,
+.opponentHand-toimen .opponentHandTiles,
+.opponentHand-kamicha .opponentHandTiles,
+.opponentHand-shimocha .opponentHandTiles {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  width: auto !important;
+  height: auto !important;
+  gap: 2px !important;
+  margin: 0 !important;
+}
+
+.playerToimen .opponentHandTiles .tile,
+.playerKamicha .opponentHandTiles .tile,
+.playerShimocha .opponentHandTiles .tile,
+.opponentHand-toimen .opponentHandTiles .tile,
+.opponentHand-kamicha .opponentHandTiles .tile,
+.opponentHand-shimocha .opponentHandTiles .tile {
+  margin: 0 !important;
+  transform: none !important;
+}
+
+.playerToimen .opponentTsumo,
+.playerKamicha .opponentTsumo,
+.playerShimocha .opponentTsumo,
+.opponentHand-toimen .opponentTsumo,
+.opponentHand-kamicha .opponentTsumo,
+.opponentHand-shimocha .opponentTsumo {
+  margin: 0 0 0 7px !important;
+  align-self: flex-end !important;
+}
+
+.playerToimen .opponentMelds,
+.playerKamicha .opponentMelds,
+.playerShimocha .opponentMelds,
+.opponentHand-toimen .opponentMelds,
+.opponentHand-kamicha .opponentMelds,
+.opponentHand-shimocha .opponentMelds {
+  position: static !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  justify-content: flex-start !important;
+  gap: 6px !important;
+  margin: 0 0 0 10px !important;
+  pointer-events: auto !important;
+}
+
+.playerToimen .opponentMelds .meld,
+.playerKamicha .opponentMelds .meld,
+.playerShimocha .opponentMelds .meld,
+.opponentHand-toimen .opponentMelds .meld,
+.opponentHand-kamicha .opponentMelds .meld,
+.opponentHand-shimocha .opponentMelds .meld {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  gap: 1px !important;
+}
+
+.playerToimen .opponentMelds .tile,
+.playerKamicha .opponentMelds .tile,
+.playerShimocha .opponentMelds .tile,
+.opponentHand-toimen .opponentMelds .tile,
+.opponentHand-kamicha .opponentMelds .tile,
+.opponentHand-shimocha .opponentMelds .tile {
+  margin: 0 !important;
+  transform: none !important;
+}
+
+.playerToimen .opponentMelds .tile img,
+.playerKamicha .opponentMelds .tile img,
+.playerShimocha .opponentMelds .tile img,
+.opponentHand-toimen .opponentMelds .tile img,
+.opponentHand-kamicha .opponentMelds .tile img,
+.opponentHand-shimocha .opponentMelds .tile img {
+  transform: none !important;
+}
+
+.calledTileWrapper {
+  position: relative !important;
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  width: 45px !important;
+  height: 32px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 1px !important;
+}
+
+.calledTileWrapperSmall {
+  width: 31px !important;
+  height: 22px !important;
+}
+
+.calledTileWrapper > .tile {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  margin: 0 !important;
+  transform: translate(-50%, -50%) rotate(-90deg) !important;
+  transform-origin: center center !important;
+}
+
+.kakanCalledStack {
+  position: relative !important;
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  width: 45px !important;
+  height: 43px !important;
+  margin: 0 1px !important;
+  overflow: visible !important;
+}
+
+.kakanCalledStackSmall {
+  width: 31px !important;
+  height: 30px !important;
+}
+
+.kakanBaseTile,
+.kakanAddedTile {
+  position: absolute !important;
+  left: 50% !important;
+  display: inline-flex !important;
+  transform: translateX(-50%) rotate(-90deg) !important;
+  transform-origin: center center !important;
+}
+
+.kakanBaseTile {
+  bottom: 0 !important;
+  z-index: 2 !important;
+}
+
+.kakanAddedTile {
+  top: 0 !important;
+  z-index: 4 !important;
+  filter: drop-shadow(0 2px 3px rgba(18, 41, 52, 0.18));
+}
+
+/* Square-table player-local architecture. Every player renders in the same
+   local coordinate system as self; only the full layer rotates around center. */
+.gameTable {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.gameTable .tableArea {
+  position: relative;
+  display: block;
+  overflow: hidden;
+}
+
+.seatLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  transform: rotate(var(--seat-rotation));
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.seatLayer * {
+  pointer-events: auto;
+}
+
+.seatLayer-self {
+  z-index: 6;
+}
+
+.seatLayer-shimocha,
+.seatLayer-toimen,
+.seatLayer-kamicha {
+  z-index: 3;
+}
+
+.localPlayerLabel {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  transform: translateX(-50%);
+  min-width: 130px;
+  display: flex;
+  justify-content: center;
+}
+
+.localPlayerLabel .playerLabel {
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(228, 250, 247, 0.68);
+  box-shadow: 0 4px 10px rgba(35, 91, 103, 0.08);
+}
+
+.localHand {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  transform: translateX(-50%);
+}
+
+.localHandTiles {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.localTsumo {
+  display: flex;
+  align-items: flex-end;
+  margin-left: 8px;
+}
+
+
+.localRiver {
+  position: absolute;
+  left: calc(50% - 66px);
+  bottom: 148px;
+  width: 132px;
+  height: 112px;
+  z-index: 5;
+  transform-origin: center center;
+}
+
+.localRiverOverflow {
+  bottom: 154px;
+  scale: 0.88;
+}
+
+.localRiverSlot {
+  position: absolute;
+  width: 22px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  transform-origin: center center;
+}
+
+.localRiverRiichiSlot::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 5px;
+  background: rgba(181, 71, 66, 0.11);
+}
+
+.localRiverSlot .tile {
+  position: relative;
+  z-index: 1;
+}
+
+.localMelds {
+  position: absolute;
+  right: 28px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 7;
+}
+
+.localMelds .meld {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.seatLayer-self .localHand .tile:not(.tileSmall) {
+  width: 28px;
+  height: 40px;
+}
+
+.seatLayer-self .localHand .tile:not(.tileSmall) img {
+  width: 100%;
+  height: 100%;
+}
+
+.seatLayer-shimocha .localHand,
+.seatLayer-toimen .localHand,
+.seatLayer-kamicha .localHand {
+  bottom: 16px;
+}
+
+.seatLayer-shimocha .localPlayerLabel,
+.seatLayer-toimen .localPlayerLabel,
+.seatLayer-kamicha .localPlayerLabel {
+  bottom: 54px;
+}
+
+/* Visual polish overrides: calmer desktop surface, less template-like glow.
+   Keep geometry, seat rotations, rivers, meld placement, and tile coordinates untouched. */
+:root {
+  color: #202b31;
+  background: #f3f5f4;
+}
+
+body {
+  background: #f3f5f4;
+}
+
+.viewportFrame {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(137, 182, 176, 0.12), transparent 32%),
+    linear-gradient(180deg, #f7f8f7 0%, #edf2f1 100%);
+}
+
+.commandBar {
+  border-bottom: 1px solid rgba(34, 47, 52, 0.08);
+  background: rgba(252, 253, 252, 0.88);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+.brandMark {
+  border: 0;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #187d68, #0f6758);
+  box-shadow:
+    0 8px 18px rgba(15, 103, 88, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.brandCluster h1 {
+  color: #1c2930;
+  font-weight: 760;
+}
+
+.brandCluster p {
+  color: #6b7678;
+}
+
+button,
+input,
+select {
+  border-radius: 7px;
+}
+
+button {
+  border-color: rgba(36, 49, 58, 0.12);
+  background: linear-gradient(180deg, #ffffff 0%, #f8faf9 100%);
+  box-shadow:
+    0 1px 2px rgba(21, 31, 36, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  font-weight: 650;
+}
+
+button:hover:not(:disabled) {
+  border-color: rgba(36, 49, 58, 0.18);
+  background: linear-gradient(180deg, #ffffff 0%, #f4f7f6 100%);
+}
+
+button.primary {
+  border-color: #0f7f6a;
+  background: linear-gradient(180deg, #289a84 0%, #167b68 100%);
+  box-shadow:
+    0 5px 14px rgba(22, 123, 104, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+button.danger {
+  border-color: rgba(188, 83, 67, 0.32);
+  background: linear-gradient(180deg, #fffdfc 0%, #fff5f2 100%);
+  color: #a54134;
+}
+
+input,
+select {
+  border-color: rgba(36, 49, 58, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 1px 2px rgba(25, 39, 45, 0.035);
+}
+
+input:focus,
+select:focus {
+  border-color: rgba(23, 125, 105, 0.48);
+  box-shadow:
+    0 0 0 3px rgba(23, 125, 105, 0.1),
+    inset 0 1px 2px rgba(25, 39, 45, 0.02);
+}
+
+.languageSwitch,
+.statusBeacon,
+.controlDeck,
+.telemetryRail,
+.phaseBanner,
+.modelStrip,
+.tableCanvas,
+.gameTable {
+  border-color: rgba(36, 49, 58, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 18px 40px rgba(33, 48, 54, 0.07),
+    0 1px 1px rgba(33, 48, 54, 0.035);
+}
+
+.controlDeck,
+.telemetryRail {
+  backdrop-filter: blur(18px);
+}
+
+.panelTitle,
+.telemetryTitle {
+  color: #14715f;
+}
+
+.accountSnapshot {
+  border-color: rgba(36, 49, 58, 0.06);
+  background: linear-gradient(180deg, rgba(248, 251, 250, 0.92), rgba(239, 246, 244, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.accountSnapshot strong,
+.phaseBanner strong {
+  color: #1c2c32;
+}
+
+.accountSnapshot small,
+.languageSwitch button.active {
+  background: #eef6f3;
+  color: #126b5a;
+}
+
+.saveButton {
+  border-color: rgba(23, 125, 105, 0.22);
+  background: linear-gradient(180deg, #f6fbf9 0%, #e7f4f0 100%);
+  color: #126b5a;
+}
+
+.phaseBanner.status-logging_in,
+.phaseBanner.status-matching,
+.phaseBanner.status-reconnecting,
+.phaseBanner.status-in_game {
+  border-color: rgba(23, 125, 105, 0.18);
+  background: linear-gradient(135deg, rgba(248, 252, 251, 0.94), rgba(239, 247, 245, 0.9));
+}
+
+.status-in_game,
+.status-matching,
+.status-logging_in,
+.status-reconnecting {
+  border-color: rgba(23, 125, 105, 0.24);
+  background: rgba(238, 248, 245, 0.92);
+  color: #126b5a;
+}
+
+.gameTable .tableArea {
+  border-color: rgba(58, 132, 139, 0.34);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.04) 42%, transparent 68%),
+    linear-gradient(145deg, #b7dfdb 0%, #93d0cf 46%, #78bfc8 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.34),
+    inset 0 26px 76px rgba(255, 255, 255, 0.12),
+    inset 0 -34px 72px rgba(51, 126, 137, 0.12);
+}
+
+.centerInfo {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(28, 51, 58, 0.95), rgba(20, 41, 48, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 30px rgba(16, 41, 49, 0.24);
+}
+
+.centerInfo strong {
+  color: #f4fbf8;
+}
+
+.centerInfo span,
+.centerDoraInfo b {
+  color: rgba(220, 235, 232, 0.82);
+}
+
+.localPlayerLabel .playerLabel {
+  background: rgba(246, 250, 249, 0.78);
+  box-shadow:
+    0 5px 14px rgba(34, 61, 68, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.playerName {
+  color: #203136;
+}
+
+.playerScore {
+  color: #607173;
+}
+
+.tile {
+  border-color: rgba(190, 199, 196, 0.9);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbf6 78%, #ecebe3 100%);
+  box-shadow:
+    0 1px 0 rgba(165, 171, 164, 0.72),
+    0 3px 7px rgba(31, 45, 49, 0.16);
+}
+
+.tileBack {
+  border-color: rgba(10, 40, 62, 0.64);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 38%),
+    linear-gradient(145deg, #234760, #162d43);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 2px 5px rgba(18, 41, 52, 0.22);
+}
+
+.telemetryBlock {
+  border-color: rgba(36, 49, 58, 0.07);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.playerLine {
+  background: rgba(247, 250, 249, 0.72);
+}
+
+/* Visual director pass v2: leave the green SaaS shell behind.
+   This block is intentionally visual-only: no seat, river, meld, or tile geometry changes. */
+:root {
+  --surface-bg: #0b0f14;
+  --surface-panel: #141a22;
+  --surface-panel-soft: #1a222c;
+  --surface-line: rgba(238, 244, 242, 0.08);
+  --surface-text: #e7edf0;
+  --surface-muted: #7f8b92;
+  --accent-metal: #c7a25a;
+  --accent-metal-soft: rgba(199, 162, 90, 0.16);
+  --accent-red: #b54739;
+  color: var(--surface-text);
+  background: var(--surface-bg);
+}
+
+body {
+  background: var(--surface-bg);
+}
+
+.viewportFrame {
+  background:
+    radial-gradient(circle at 50% 12%, rgba(43, 55, 68, 0.88), transparent 36%),
+    linear-gradient(180deg, #10151b 0%, #080b0f 100%) !important;
+}
+
+.commandBar {
+  border-bottom-color: rgba(255, 255, 255, 0.07) !important;
+  background: rgba(12, 17, 23, 0.94) !important;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.28) !important;
+}
+
+.brandMark {
+  border: 1px solid rgba(199, 162, 90, 0.28) !important;
+  border-radius: 9px !important;
+  background: linear-gradient(145deg, #202a35 0%, #101720 100%) !important;
+  color: var(--accent-metal) !important;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09) !important;
+}
+
+.brandCluster h1 {
+  color: #f5f8f7 !important;
+}
+
+.brandCluster p,
+.field,
+.phaseBanner p,
+.recommendation span,
+.logList p {
+  color: var(--surface-muted) !important;
+}
+
+.languageSwitch,
+.statusBeacon,
+.controlDeck,
+.telemetryRail,
+.phaseBanner,
+.modelStrip,
+.tableCanvas,
+.gameTable {
+  border-color: var(--surface-line) !important;
+  background: rgba(20, 26, 34, 0.92) !important;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  backdrop-filter: none !important;
+}
+
+.panelTitle,
+.telemetryTitle {
+  color: var(--accent-metal) !important;
+}
+
+.panelTitle svg,
+.telemetryTitle svg,
+.languageSwitch svg {
+  color: var(--accent-metal) !important;
+}
+
+button {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 6px !important;
+  background: linear-gradient(180deg, #27313d 0%, #171f29 100%) !important;
+  color: #edf3f5 !important;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+button:hover:not(:disabled) {
+  border-color: rgba(199, 162, 90, 0.52) !important;
+  background: linear-gradient(180deg, #303c4a 0%, #1d2631 100%) !important;
+}
+
+button.primary {
+  border-color: rgba(231, 194, 107, 0.76) !important;
+  background: linear-gradient(180deg, #d0ad65 0%, #9f7a32 100%) !important;
+  color: #111820 !important;
+  box-shadow:
+    0 8px 18px rgba(199, 162, 90, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28) !important;
+}
+
+button.danger {
+  border-color: rgba(199, 75, 58, 0.58) !important;
+  background: linear-gradient(180deg, #743127 0%, #421814 100%) !important;
+  color: #ffe8e3 !important;
+}
+
+input,
+select {
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  border-radius: 6px !important;
+  background: rgba(7, 10, 14, 0.72) !important;
+  color: #edf3f5 !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.28) !important;
+}
+
+input:focus,
+select:focus {
+  border-color: rgba(199, 162, 90, 0.6) !important;
+  box-shadow:
+    0 0 0 3px rgba(199, 162, 90, 0.14),
+    inset 0 1px 3px rgba(0, 0, 0, 0.18) !important;
+}
+
+select:disabled {
+  background: rgba(16, 22, 29, 0.82) !important;
+  color: #667179 !important;
+}
+
+.languageSwitch button.active {
+  background: var(--accent-metal-soft) !important;
+  color: #f3d79b !important;
+}
+
+.status-in_game,
+.status-matching,
+.status-logging_in,
+.status-reconnecting {
+  border-color: rgba(199, 162, 90, 0.34) !important;
+  background: rgba(199, 162, 90, 0.1) !important;
+  color: #e2c27a !important;
+}
+
+.accountSnapshot,
+.telemetryBlock {
+  border-color: rgba(255, 255, 255, 0.055) !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+.accountSnapshot strong,
+.accountSnapshot dd,
+.phaseBanner strong,
+.playerLine strong {
+  color: #f4f7f6 !important;
+}
+
+.accountSnapshot span,
+.accountSnapshot dt {
+  color: #859199 !important;
+}
+
+.accountSnapshot small,
+.accountSnapshot small.isRefreshing {
+  background: rgba(199, 162, 90, 0.14) !important;
+  color: #e2c27a !important;
+}
+
+.saveButton {
+  border-color: rgba(199, 162, 90, 0.3) !important;
+  background: rgba(199, 162, 90, 0.08) !important;
+  color: #e2c27a !important;
+}
+
+.playerLine {
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+.gameTable .tableArea {
+  border: 3px solid rgba(22, 26, 25, 0.96) !important;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(58, 94, 86, 0.86) 0%, rgba(27, 58, 51, 0.94) 45%, rgba(10, 29, 25, 0.98) 100%),
+    #0e2a24 !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 22px 72px rgba(255, 255, 255, 0.055),
+    inset 0 -70px 130px rgba(0, 0, 0, 0.42),
+    0 24px 54px rgba(0, 0, 0, 0.44) !important;
+}
+
+.centerInfo {
+  border-color: rgba(199, 162, 90, 0.18) !important;
+  background: linear-gradient(180deg, rgba(22, 29, 37, 0.97), rgba(10, 15, 20, 0.96)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 34px rgba(0, 0, 0, 0.46) !important;
+}
+
+.centerInfo strong {
+  color: #f5f4ef !important;
+}
+
+.centerInfo span,
+.centerDoraInfo b {
+  color: rgba(225, 232, 230, 0.78) !important;
+}
+
+.localPlayerLabel .playerLabel {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: rgba(13, 18, 23, 0.84) !important;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+.playerName {
+  color: #f5f8f7 !important;
+}
+
+.playerScore {
+  color: #d4b66d !important;
+}
+
+.seatWindTag {
+  background: rgba(199, 162, 90, 0.16) !important;
+  color: #e2c27a !important;
+}
+
+.tile:not(.tileBack) {
+  border-top-color: #fffef9 !important;
+  border-left-color: #fffdf5 !important;
+  border-right-color: #d8d0bd !important;
+  border-bottom-color: #b9ab92 !important;
+  background: linear-gradient(145deg, #fffefd 0%, #fbf8ee 55%, #e9deca 100%) !important;
+  box-shadow:
+    0 1px 0 #b7aa93,
+    0 2px 0 #9d907d,
+    0 5px 9px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88) !important;
+}
+
+.tileBack {
+  border-top-color: rgba(255, 236, 219, 0.2) !important;
+  border-left-color: rgba(255, 236, 219, 0.16) !important;
+  border-right-color: #6f1711 !important;
+  border-bottom-color: #4d0b07 !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.13), transparent 42%),
+    linear-gradient(145deg, #b33126 0%, #78130d 100%) !important;
+  box-shadow:
+    0 1px 0 #6b100a,
+    0 2px 0 #4e0905,
+    0 5px 9px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14) !important;
+}
+
+.tileBackInner {
+  background: #8b1a12 !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 2px 5px rgba(0, 0, 0, 0.28) !important;
+}
+
+.tile img {
+  filter: contrast(1.03) saturate(0.94);
+  opacity: 0.94;
+}
+
+.confidenceBar {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.confidenceBar i {
+  background: linear-gradient(90deg, #9f7a32 0%, #d0ad65 100%) !important;
+}
+
+.recommendation strong {
+  color: #e2c27a !important;
+}
+
+/* Current functional pass: scoring readability, compact rail, and classic table materials. */
+.gameTable {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.gameTable .tableArea {
+  border-color: #163f31 !important;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(31, 89, 67, 0.92) 0%, rgba(19, 72, 53, 0.98) 44%, rgba(7, 45, 32, 1) 100%),
+    #0c3a2a !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 18px 58px rgba(255, 255, 255, 0.045),
+    inset 0 -72px 130px rgba(0, 0, 0, 0.34),
+    0 18px 42px rgba(0, 0, 0, 0.32) !important;
+}
+
+.tileBack {
+  border-top-color: #ffe3a4 !important;
+  border-left-color: #ffd680 !important;
+  border-right-color: #a36f18 !important;
+  border-bottom-color: #7c520f !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 44%),
+    linear-gradient(145deg, #ffd35d 0%, #d39a28 58%, #a97017 100%) !important;
+  box-shadow:
+    0 1px 0 #a97017,
+    0 2px 0 #7c520f,
+    0 5px 9px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+.tileBackInner {
+  background: linear-gradient(145deg, #f6c64a 0%, #c88b20 100%) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 0 2px 5px rgba(94, 58, 10, 0.22) !important;
+}
+
+.localRiver {
+  left: calc(50% - 71px) !important;
+  width: 142px !important;
+}
+
+.telemetryRail {
+  grid-template-rows: 100px 286px minmax(196px, 1fr) minmax(110px, 0.78fr) !important;
+}
+
+.playersBlock {
+  grid-template-rows: auto auto repeat(4, 22px) !important;
+  gap: 4px !important;
+}
+
+.playersBlock .liveAccount {
+  margin-bottom: 2px !important;
+  padding: 8px !important;
+}
+
+.playersBlock .liveAccount dl {
+  gap: 4px !important;
+}
+
+.playersBlock .playerLine {
+  min-height: 22px !important;
+  padding: 2px 7px !important;
+}
+
+/* Restore the light mint shell while keeping the classic green felt and yellow backs. */
+:root {
+  --surface-bg: #eef5f3;
+  --surface-text: #24313a;
+  --surface-muted: #72807c;
+  --accent-metal: #14715f;
+  --accent-metal-soft: rgba(23, 125, 105, 0.12);
+  color: #24313a !important;
+  background: #eef5f3 !important;
+}
+
+body {
+  background: #eef5f3 !important;
+}
+
+.viewportFrame {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(137, 182, 176, 0.14), transparent 32%),
+    linear-gradient(180deg, #f7f8f7 0%, #edf2f1 100%) !important;
+}
+
+.commandBar {
+  border-bottom-color: rgba(91, 126, 119, 0.16) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.84) !important;
+}
+
+.brandMark {
+  border-color: rgba(27, 143, 119, 0.35) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(145deg, #1aa184, #0f7b68) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 8px 18px rgba(15, 103, 88, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.brandCluster h1 {
+  color: #1c2930 !important;
+}
+
+.brandCluster p,
+.field,
+.phaseBanner p,
+.recommendation span,
+.logList p {
+  color: #6b7678 !important;
+}
+
+button {
+  border-color: rgba(36, 49, 58, 0.12) !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f8faf9 100%) !important;
+  color: #26343d !important;
+  box-shadow:
+    0 1px 2px rgba(21, 31, 36, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82) !important;
+}
+
+button:hover:not(:disabled) {
+  border-color: rgba(36, 49, 58, 0.18) !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f7f6 100%) !important;
+}
+
+button.primary {
+  border-color: #168d75 !important;
+  background: linear-gradient(180deg, #2faf95 0%, #17886f 100%) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 5px 14px rgba(22, 123, 104, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+button.danger {
+  border-color: rgba(188, 83, 67, 0.32) !important;
+  background: linear-gradient(180deg, #fffdfc 0%, #fff5f2 100%) !important;
+  color: #a54134 !important;
+}
+
+input,
+select {
+  border-color: rgba(36, 49, 58, 0.12) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  color: #24313a !important;
+  box-shadow: inset 0 1px 2px rgba(25, 39, 45, 0.035) !important;
+}
+
+input:focus,
+select:focus {
+  border-color: rgba(23, 125, 105, 0.48) !important;
+  box-shadow:
+    0 0 0 3px rgba(23, 125, 105, 0.1),
+    inset 0 1px 2px rgba(25, 39, 45, 0.02) !important;
+}
+
+select:disabled {
+  background: #f3f6f5 !important;
+  color: #9aa7a3 !important;
+}
+
+.languageSwitch,
+.statusBeacon,
+.controlDeck,
+.telemetryRail,
+.phaseBanner,
+.modelStrip,
+.tableCanvas {
+  border-color: rgba(36, 49, 58, 0.08) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  box-shadow:
+    0 18px 40px rgba(33, 48, 54, 0.07),
+    0 1px 1px rgba(33, 48, 54, 0.035) !important;
+  backdrop-filter: blur(18px) !important;
+}
+
+.panelTitle,
+.telemetryTitle {
+  color: #14715f !important;
+}
+
+.panelTitle svg,
+.telemetryTitle svg,
+.languageSwitch svg {
+  color: #14715f !important;
+}
+
+.languageSwitch button.active {
+  background: #dff3ee !important;
+  color: #126b5a !important;
+}
+
+.status-in_game,
+.status-matching,
+.status-logging_in,
+.status-reconnecting {
+  border-color: rgba(23, 125, 105, 0.24) !important;
+  background: rgba(238, 248, 245, 0.92) !important;
+  color: #126b5a !important;
+}
+
+.accountSnapshot,
+.telemetryBlock {
+  border-color: rgba(36, 49, 58, 0.07) !important;
+  background: rgba(255, 255, 255, 0.54) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+}
+
+.accountSnapshot strong,
+.accountSnapshot dd,
+.phaseBanner strong,
+.playerLine strong {
+  color: #1c2c32 !important;
+}
+
+.accountSnapshot span,
+.accountSnapshot dt {
+  color: #6b7678 !important;
+}
+
+.accountSnapshot small,
+.accountSnapshot small.isRefreshing {
+  background: #eef6f3 !important;
+  color: #126b5a !important;
+}
+
+.saveButton {
+  border-color: rgba(23, 125, 105, 0.22) !important;
+  background: linear-gradient(180deg, #f6fbf9 0%, #e7f4f0 100%) !important;
+  color: #126b5a !important;
+}
+
+.playerLine {
+  background: rgba(247, 250, 249, 0.72) !important;
+}
+
+.gameTable {
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.gameTable .tableArea {
+  border-color: #27916e !important;
+  background:
+    radial-gradient(circle at 50% 46%, rgba(51, 165, 120, 0.9) 0%, rgba(31, 128, 89, 0.96) 46%, rgba(17, 91, 62, 1) 100%),
+    #17724f !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 22px 64px rgba(255, 255, 255, 0.06),
+    inset 0 -70px 120px rgba(0, 0, 0, 0.24),
+    0 18px 42px rgba(35, 91, 103, 0.16) !important;
+}
+
+.tileBack {
+  border-top-color: #fff1ae !important;
+  border-left-color: #ffe27a !important;
+  border-right-color: #c98712 !important;
+  border-bottom-color: #9a6208 !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), transparent 44%),
+    linear-gradient(145deg, #ffe36a 0%, #f2ba26 58%, #c98712 100%) !important;
+  box-shadow:
+    0 1px 0 #bd7d0d,
+    0 2px 0 #93610a,
+    0 5px 9px rgba(20, 55, 42, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26) !important;
+}
+
+.tileBackInner {
+  background: linear-gradient(145deg, #ffe36d 0%, #e7aa1d 100%) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 0 2px 5px rgba(104, 63, 6, 0.2) !important;
+}
+
+.confidenceBar {
+  background: rgba(35, 91, 103, 0.13) !important;
+}
+
+.confidenceBar i {
+  background: linear-gradient(90deg, #35a888 0%, #1d8791 100%) !important;
+}
+
+.recommendation strong {
+  color: #14715f !important;
+}
+
+/* Restore original control and tile-face styling after the material-only pass. */
+.commandBar {
+  margin: 12px 14px 0 !important;
+  border: 1px solid rgba(91, 126, 119, 0.14) !important;
+  border-radius: 16px !important;
+}
+
+button {
+  height: 34px !important;
+  border: 1px solid #d6e3df !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: #26343d !important;
+  box-shadow: 0 1px 0 rgba(34, 52, 60, 0.04) !important;
+}
+
+button.primary {
+  border-color: #1b8f77 !important;
+  background: #1b8f77 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  box-shadow: 0 1px 0 rgba(34, 52, 60, 0.04) !important;
+}
+
+button.danger {
+  border-color: #f0b8ad !important;
+  background: #fff7f5 !important;
+  color: #b64435 !important;
+}
+
+.languageSwitch button {
+  height: 28px !important;
+  min-width: 62px !important;
+  border: 0 !important;
+  padding: 0 9px !important;
+  background: transparent !important;
+  color: #53645f !important;
+  box-shadow: none !important;
+}
+
+.languageSwitch button.active {
+  background: #daf2eb !important;
+  color: #0f6e5b !important;
+  font-weight: 800 !important;
+}
+
+.tile:not(.tileBack) {
+  border: 1px solid #c8d8d5 !important;
+  border-radius: 4px !important;
+  background: #ffffff !important;
+  box-shadow:
+    0 1px 2px rgba(29, 58, 73, 0.16),
+    0 5px 12px rgba(29, 58, 73, 0.08) !important;
+}
+
+.tile:not(.tileBack) img {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+.phaseBanner {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+}
+
+.phaseBanner > div::before {
+  content: "◎";
+  color: #14715f;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.phaseBanner > div {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  flex-wrap: wrap !important;
+}
+
+.phaseBanner span {
+  color: #14715f !important;
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+}
+
+.phaseBanner strong {
+  flex-basis: 100% !important;
+  margin-left: 25px !important;
+  color: #1c2c32 !important;
+  font-size: 20px !important;
+  font-weight: 800 !important;
+  line-height: 1.05 !important;
+}
+
+.commandActions button.primary {
+  border-color: rgba(23, 125, 105, 0.22) !important;
+  background: linear-gradient(180deg, #f6fbf9 0%, #e7f4f0 100%) !important;
+  color: #126b5a !important;
+  font-weight: 800 !important;
+  box-shadow: 0 1px 0 rgba(34, 52, 60, 0.04) !important;
+}
+
+.commandActions button.primary:hover:not(:disabled) {
+  border-color: rgba(23, 125, 105, 0.3) !important;
+  background: linear-gradient(180deg, #f3faf7 0%, #dff0eb 100%) !important;
+  color: #126b5a !important;
+}

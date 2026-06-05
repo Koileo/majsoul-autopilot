@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BotAction {
     Dahai { tile: String, tsumogiri: bool },
     None,
@@ -12,32 +14,32 @@ pub enum BotAction {
     Ryukyoku,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationContext {
     pub source: String,
     pub seat: u32,
     pub received_key: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingAction {
     pub action: BotAction,
     pub context: Option<OperationContext>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Operation {
     pub r#type: u32,
     pub combination: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActionState {
     pub current_context: Option<OperationContext>,
     pub operations: Vec<Operation>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RpcPlan {
     InputOperation {
         r#type: u32,
@@ -443,5 +445,4 @@ mod tests {
             }
         );
     }
-
 }

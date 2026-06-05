@@ -2,7 +2,7 @@
 
 一个基于 Mortal 模型和 Liqi 协议的纯 Rust 雀魂自动打牌工具。
 
-本项目以命令行程序运行。程序使用邮箱账号登录雀魂，通过 Liqi websocket 协议完成匹配、进局、重连和对局操作，并由 Mortal 模型决定打牌动作。
+本项目同时提供桌面 GUI 和命令行程序。程序使用邮箱账号登录雀魂，通过 Liqi websocket 协议完成匹配、进局、重连和对局操作，并由 Mortal 模型决定打牌动作。
 
 ## 功能特性
 
@@ -10,6 +10,7 @@
 - 支持四人段位场匹配
 - 按账号段位自动选择目标房间
 - 使用 Candle 进行 Mortal 原生推理
+- 提供 Tauri 桌面 GUI，用于配置、状态、日志和牌桌查看
 - 支持已有对局重连
 - 支持 Mortal 立直二段决策流程
 - 包含 operation 过期保护和弃牌 ACK 校验
@@ -33,7 +34,27 @@ macOS Apple Silicon 预编译包可以在 GitHub Releases 下载：
 
 [下载最新版本](https://github.com/happy-shine/majsoul-autopilot/releases/latest)
 
-macOS arm64 包内包含：
+当前提供两个 macOS arm64 包：
+
+- `majsoul-autopilot-gui-macos-arm64.zip`：桌面 App，包内同时包含 CLI 可执行文件
+- `majsoul-autopilot-rs-macos-arm64.zip`：CLI-only 包，保持原有目录结构
+
+GUI 包内包含：
+
+```text
+majsoul-autopilot-gui-macos-arm64/
+  Majsoul Autopilot.app
+  majsoul-autopilot-rs
+  settings.example.json
+  README.md
+  README.zh-CN.md
+  models/
+    mortal-298k/
+      model.safetensors
+      model_config.json
+```
+
+CLI 包内包含：
 
 ```text
 majsoul-autopilot-rs-macos-arm64/
@@ -49,7 +70,9 @@ majsoul-autopilot-rs-macos-arm64/
 
 ## 快速开始
 
-解压 release 包并进入目录：
+桌面版解压 `majsoul-autopilot-gui-macos-arm64.zip` 后，打开 `Majsoul Autopilot.app`。
+
+CLI 版解压 `majsoul-autopilot-rs-macos-arm64.zip` 后进入目录：
 
 ```bash
 cd majsoul-autopilot-rs-macos-arm64
@@ -72,6 +95,15 @@ cp settings.example.json settings.json
 
 ```bash
 ./majsoul-autopilot-rs --settings settings.json check-model
+```
+
+如果是从源码运行，而不是使用 release 包，先准备模型：
+
+```bash
+mkdir -p models
+curl -L -o models/mortal_298k.pth \
+  https://huggingface.co/VoidShine/mortal-298k/resolve/main/mortal_298k.pth
+python3 tools/export_mortal.py models/mortal_298k.pth models/mortal-298k
 ```
 
 检查登录状态和目标房间：
@@ -142,6 +174,19 @@ cargo build --release -p majsoul-autopilot-rs
 target/release/majsoul-autopilot-rs
 ```
 
+构建桌面 App：
+
+```bash
+npm --prefix apps/desktop install
+npm --prefix apps/desktop run tauri -- build
+```
+
+生成 macOS release 压缩包：
+
+```bash
+tools/package_macos_release.sh
+```
+
 从源码本地运行时，需要准备：
 
 ```text
@@ -177,6 +222,8 @@ crates/
   mortal/        Mortal 推理和动作解码
   protocol/      lobby/game websocket 客户端
   riichi-core/   立直麻将状态和 observation 编码
+apps/
+  desktop/       Tauri 桌面 App
 ```
 
 ## 免责声明

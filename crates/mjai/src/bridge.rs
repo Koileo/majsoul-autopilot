@@ -1,9 +1,18 @@
 use anyhow::{bail, Result};
 use liqi::pb;
 use prost::Message;
+use serde::Serialize;
 use std::time::Instant;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HuleFan {
+    pub name: String,
+    pub val: u32,
+    pub id: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
     StartGame {
         id: u32,
@@ -60,6 +69,29 @@ pub enum Event {
         pai: String,
         consumed: Vec<String>,
     },
+    Dora {
+        markers: Vec<String>,
+    },
+    Hule {
+        actor: u32,
+        target: Option<u32>,
+        pai: String,
+        zimo: bool,
+        title: String,
+        count: u32,
+        fu: u32,
+        fans: Vec<HuleFan>,
+        point_sum: u32,
+        hand: Vec<String>,
+        ming: Vec<String>,
+    },
+    NoTile {
+        liujumanguan: bool,
+    },
+    LiuJu {
+        actor: Option<u32>,
+        reason: u32,
+    },
     EndKyoku,
     EndGame,
 }
@@ -82,8 +114,10 @@ pub struct Bridge {
     my_tehais: Vec<String>,
     my_tsumohai: Option<String>,
     accept_reach: Option<Event>,
+    last_discard_actor: Option<u32>,
     last_operation_list: Vec<pb::OptionalOperation>,
     last_operation_context: Option<OperationContext>,
+    riichi_accepted: [bool; 4],
     received_key: u64,
     discard_counter: u64,
     round_end_counter: u64,
@@ -123,6 +157,17 @@ impl Bridge {
 
     pub fn my_tsumohai(&self) -> Option<&str> {
         self.my_tsumohai.as_deref()
+    }
+
+    pub fn riichi_accepted(&self, seat: u32) -> bool {
+        self.riichi_accepted
+            .get(seat as usize)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    pub fn self_riichi_accepted(&self) -> bool {
+        self.riichi_accepted(self.seat)
     }
 
     pub fn handle_action(&mut self, name: &str, data: &[u8]) -> Result<Vec<Event>> {
@@ -165,7 +210,7 @@ impl Bridge {
                     actor: action.seat,
                     pai,
                 });
-                self.update_dora_events(&action.doras);
+                self.update_dora_events(&action.doras, &mut events);
             }
             "ActionDiscardTile" => {
                 let action = pb::ActionDiscardTile::decode(data)?;
@@ -177,6 +222,9 @@ impl Bridge {
                 self.discard_counter += 1;
                 if action.is_liqi {
                     events.push(Event::Reach { actor: action.seat });
+                    if let Some(accepted) = self.riichi_accepted.get_mut(action.seat as usize) {
+                        *accepted = true;
+                    }
                 }
                 let pai = ms_tile_to_mjai(&action.tile);
                 if action.seat == self.seat {
@@ -187,10 +235,11 @@ impl Bridge {
                     pai,
                     tsumogiri: action.moqie,
                 });
+                self.last_discard_actor = Some(action.seat);
                 if action.is_liqi {
                     self.accept_reach = Some(Event::ReachAccepted { actor: action.seat });
                 }
-                self.update_dora_events(&action.doras);
+                self.update_dora_events(&action.doras, &mut events);
             }
             "ActionChiPengGang" => {
                 let action = pb::ActionChiPengGang::decode(data)?;
@@ -209,11 +258,58 @@ impl Bridge {
                     self.clear_operation();
                 }
                 events.push(an_gang_add_gang_event(&action)?);
-                self.update_dora_events(&action.doras);
+                self.update_dora_events(&action.doras, &mut events);
             }
-            "ActionHule" | "ActionNoTile" | "ActionLiuJu" => {
+            "ActionHule" => {
+                let action = pb::ActionHule::decode(data)?;
                 self.round_end_counter += 1;
                 self.clear_operation();
+                for hule in &action.hules {
+                    events.push(Event::Hule {
+                        actor: hule.seat,
+                        target: self.hule_target(hule),
+                        pai: if hule.hu_tile.is_empty() {
+                            "?".to_string()
+                        } else {
+                            ms_tile_to_mjai(&hule.hu_tile)
+                        },
+                        zimo: hule.zimo,
+                        title: hule.title.clone(),
+                        count: hule.count,
+                        fu: hule.fu,
+                        fans: hule
+                            .fans
+                            .iter()
+                            .map(|fan| HuleFan {
+                                name: fan.name.clone(),
+                                val: fan.val,
+                                id: fan.id,
+                            })
+                            .collect(),
+                        point_sum: hule.point_sum,
+                        hand: hule.hand.iter().map(|tile| ms_tile_to_mjai(tile)).collect(),
+                        ming: hule.ming.clone(),
+                    });
+                }
+                events.push(Event::EndKyoku);
+            }
+            "ActionNoTile" => {
+                let action = pb::ActionNoTile::decode(data)?;
+                self.round_end_counter += 1;
+                self.clear_operation();
+                events.push(Event::NoTile {
+                    liujumanguan: action.liujumanguan,
+                });
+                events.push(Event::EndKyoku);
+            }
+            "ActionLiuJu" => {
+                let action = pb::ActionLiuJu::decode(data)?;
+                self.round_end_counter += 1;
+                self.clear_operation();
+                events.push(Event::LiuJu {
+                    actor: Some(action.seat),
+                    reason: action.r#type,
+                });
                 events.push(Event::EndKyoku);
             }
             _ => {}
@@ -253,6 +349,7 @@ impl Bridge {
         my_tehais.sort_by_key(|tile| tile_sort_key(tile));
         self.my_tehais = my_tehais.clone();
         self.my_tsumohai = None;
+        self.riichi_accepted = [false; 4];
         tehais[self.seat as usize] = my_tehais;
 
         events.push(Event::StartKyoku {
@@ -269,7 +366,10 @@ impl Bridge {
         if action.tiles.len() == 14 {
             let pai = ms_tile_to_mjai(&action.tiles[13]);
             self.my_tsumohai = Some(pai.clone());
-            events.push(Event::Tsumo { actor: self.seat, pai });
+            events.push(Event::Tsumo {
+                actor: self.seat,
+                pai,
+            });
         }
 
         if let Some(operation) = action.operation.clone() {
@@ -302,10 +402,28 @@ impl Bridge {
         self.last_operation_context = None;
     }
 
-    fn update_dora_events(&mut self, doras: &[String]) {
+    fn update_dora_events(&mut self, doras: &[String], events: &mut Vec<Event>) {
         if doras.len() > self.doras.len() {
             self.doras = doras.to_vec();
+            events.push(Event::Dora {
+                markers: self
+                    .doras
+                    .iter()
+                    .map(|tile| ms_tile_to_mjai(tile))
+                    .collect(),
+            });
         }
+    }
+
+    fn hule_target(&self, hule: &pb::HuleInfo) -> Option<u32> {
+        if hule.zimo {
+            return None;
+        }
+        if hule.dadian < 4 && hule.dadian != hule.seat {
+            return Some(hule.dadian);
+        }
+        self.last_discard_actor
+            .filter(|target| *target < 4 && *target != hule.seat)
     }
 
     fn apply_self_discard(&mut self, pai: &str, tsumogiri: bool) {
@@ -356,7 +474,7 @@ fn chi_peng_gang_event(action: &pb::ActionChiPengGang) -> Result<Event> {
             }
             Ok(Event::Chi {
                 actor,
-                target,
+                target: (actor + 3) % 4,
                 pai,
                 consumed,
             })
@@ -552,6 +670,8 @@ mod tests {
             ]
         );
         assert_eq!(bridge.discard_counter(), 1);
+        assert!(bridge.riichi_accepted(1));
+        assert!(!bridge.self_riichi_accepted());
 
         let deal = encode(pb::ActionDealTile {
             seat: 2,
@@ -570,14 +690,258 @@ mod tests {
     }
 
     #[test]
+    fn self_riichi_accepted_resets_on_new_round() {
+        let mut bridge = Bridge::new(0);
+        let discard = encode(pb::ActionDiscardTile {
+            seat: 0,
+            tile: "5m".to_string(),
+            is_liqi: true,
+            ..Default::default()
+        });
+        bridge.handle_action("ActionDiscardTile", &discard).unwrap();
+        assert!(bridge.self_riichi_accepted());
+
+        let data = encode(pb::ActionNewRound {
+            chang: 0,
+            ju: 0,
+            tiles: vec![
+                "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "1z", "2z", "3z", "4z",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+            scores: vec![25000, 25000, 25000, 25000],
+            ..Default::default()
+        });
+        bridge.handle_action("ActionNewRound", &data).unwrap();
+        assert!(!bridge.self_riichi_accepted());
+    }
+
+    #[test]
     fn round_end_clears_operation_window() {
         let mut bridge = Bridge::new(0);
         let end = encode(pb::ActionNoTile::default());
         let events = bridge.handle_action("ActionNoTile", &end).unwrap();
-        assert_eq!(events, vec![Event::EndKyoku]);
+        assert_eq!(events, vec![Event::NoTile { liujumanguan: false }, Event::EndKyoku]);
         assert_eq!(bridge.round_end_counter(), 1);
         assert!(bridge.last_operation_list().is_empty());
         assert!(bridge.last_operation_context().is_none());
+    }
+
+    #[test]
+    fn hule_event_keeps_winner_tile_and_score_summary() {
+        let mut bridge = Bridge::new(0);
+        let hule = encode(pb::ActionHule {
+            hules: vec![pb::HuleInfo {
+                seat: 2,
+                hu_tile: "7z".to_string(),
+                zimo: true,
+                title: "満貫".to_string(),
+                point_sum: 8000,
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+
+        let events = bridge.handle_action("ActionHule", &hule).unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::Hule {
+                    actor: 2,
+                    target: None,
+                    pai: "C".to_string(),
+                    zimo: true,
+                    title: "満貫".to_string(),
+                    count: 0,
+                    fu: 0,
+                    fans: Vec::new(),
+                    point_sum: 8000,
+                    hand: Vec::new(),
+                    ming: Vec::new(),
+                },
+                Event::EndKyoku,
+            ]
+        );
+        assert_eq!(bridge.round_end_counter(), 1);
+    }
+
+    #[test]
+    fn ron_hule_event_keeps_dealer_and_winner_hand() {
+        let mut bridge = Bridge::new(0);
+        let hule = encode(pb::ActionHule {
+            hules: vec![pb::HuleInfo {
+                seat: 1,
+                dadian: 3,
+                hu_tile: "7z".to_string(),
+                zimo: false,
+                title: "跳満".to_string(),
+                count: 3,
+                fu: 30,
+                fans: vec![
+                    pb::FanInfo {
+                        name: "立直".to_string(),
+                        val: 1,
+                        id: 1,
+                    },
+                    pb::FanInfo {
+                        name: "ドラ".to_string(),
+                        val: 2,
+                        id: 34,
+                    },
+                ],
+                point_sum: 12000,
+                hand: vec![
+                    "1m", "2m", "3m", "4p", "0p", "6p", "2s", "3s", "4s", "1z", "2z", "3z", "4z",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                ming: vec!["peng5z5z5z".to_string()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+
+        let events = bridge.handle_action("ActionHule", &hule).unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::Hule {
+                    actor: 1,
+                    target: Some(3),
+                    pai: "C".to_string(),
+                    zimo: false,
+                    title: "跳満".to_string(),
+                    count: 3,
+                    fu: 30,
+                    fans: vec![
+                        HuleFan {
+                            name: "立直".to_string(),
+                            val: 1,
+                            id: 1,
+                        },
+                        HuleFan {
+                            name: "ドラ".to_string(),
+                            val: 2,
+                            id: 34,
+                        },
+                    ],
+                    point_sum: 12000,
+                    hand: vec![
+                        "1m".to_string(),
+                        "2m".to_string(),
+                        "3m".to_string(),
+                        "4p".to_string(),
+                        "5pr".to_string(),
+                        "6p".to_string(),
+                        "2s".to_string(),
+                        "3s".to_string(),
+                        "4s".to_string(),
+                        "E".to_string(),
+                        "S".to_string(),
+                        "W".to_string(),
+                        "N".to_string(),
+                    ],
+                    ming: vec!["peng5z5z5z".to_string()],
+                },
+                Event::EndKyoku,
+            ]
+        );
+    }
+
+    #[test]
+    fn ron_hule_uses_last_discard_actor_when_dadian_is_score_not_seat() {
+        let mut bridge = Bridge::new(0);
+        let discard = encode(pb::ActionDiscardTile {
+            seat: 3,
+            tile: "5m".to_string(),
+            moqie: false,
+            ..Default::default()
+        });
+        bridge.handle_action("ActionDiscardTile", &discard).unwrap();
+
+        let hule = encode(pb::ActionHule {
+            hules: vec![pb::HuleInfo {
+                seat: 1,
+                dadian: 12000,
+                hu_tile: "5m".to_string(),
+                zimo: false,
+                point_sum: 12000,
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+
+        let events = bridge.handle_action("ActionHule", &hule).unwrap();
+        assert!(matches!(
+            events.first(),
+            Some(Event::Hule {
+                actor: 1,
+                target: Some(3),
+                pai,
+                zimo: false,
+                ..
+            }) if pai == "5m"
+        ));
+    }
+
+    #[test]
+    fn extra_dora_markers_are_emitted_as_table_events() {
+        let mut bridge = Bridge::new(0);
+        let data = encode(pb::ActionNewRound {
+            chang: 0,
+            ju: 0,
+            tiles: vec![
+                "1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m", "1z", "2z", "3z", "4z",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+            doras: vec!["4p".to_string()],
+            scores: vec![25000, 25000, 25000, 25000],
+            ..Default::default()
+        });
+        bridge.handle_action("ActionNewRound", &data).unwrap();
+
+        let kan = encode(pb::ActionAnGangAddGang {
+            seat: 0,
+            r#type: 3,
+            tiles: "9m".to_string(),
+            doras: vec!["4p".to_string(), "0s".to_string()],
+            ..Default::default()
+        });
+        let events = bridge.handle_action("ActionAnGangAddGang", &kan).unwrap();
+
+        assert_eq!(
+            events.last(),
+            Some(&Event::Dora {
+                markers: vec!["4p".to_string(), "5sr".to_string()]
+            })
+        );
+    }
+
+    #[test]
+    fn liuju_event_keeps_seat_zero_actor() {
+        let mut bridge = Bridge::new(0);
+        let liuju = encode(pb::ActionLiuJu {
+            r#type: 1,
+            seat: 0,
+            ..Default::default()
+        });
+
+        let events = bridge.handle_action("ActionLiuJu", &liuju).unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::LiuJu {
+                    actor: Some(0),
+                    reason: 1,
+                },
+                Event::EndKyoku,
+            ]
+        );
+        assert_eq!(bridge.round_end_counter(), 1);
     }
 
     #[test]
@@ -690,7 +1054,12 @@ mod tests {
         let daiminkan = encode(pb::ActionChiPengGang {
             seat: 3,
             r#type: 2,
-            tiles: vec!["7z".to_string(), "7z".to_string(), "7z".to_string(), "7z".to_string()],
+            tiles: vec![
+                "7z".to_string(),
+                "7z".to_string(),
+                "7z".to_string(),
+                "7z".to_string(),
+            ],
             froms: vec![3, 3, 1, 3],
             ..Default::default()
         });
@@ -741,11 +1110,16 @@ mod tests {
         let events = bridge.handle_action("ActionAnGangAddGang", &kakan).unwrap();
         assert_eq!(
             events,
-            vec![Event::Kakan {
-                actor: 0,
-                pai: "5p".to_string(),
-                consumed: vec!["5pr".to_string(), "5p".to_string(), "5p".to_string()]
-            }]
+            vec![
+                Event::Kakan {
+                    actor: 0,
+                    pai: "5p".to_string(),
+                    consumed: vec!["5pr".to_string(), "5p".to_string(), "5p".to_string()]
+                },
+                Event::Dora {
+                    markers: vec!["1s".to_string(), "9s".to_string()]
+                }
+            ]
         );
     }
 }

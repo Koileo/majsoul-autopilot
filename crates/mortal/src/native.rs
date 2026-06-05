@@ -34,6 +34,7 @@ pub struct NativeBot<E> {
     log: Vec<riichi_mjai::EventExt>,
     engine: E,
     enable_rule_based_agari_guard: bool,
+    last_decision: Option<EngineDecision>,
 }
 
 impl<E: NativeEngine> NativeBot<E> {
@@ -44,7 +45,12 @@ impl<E: NativeEngine> NativeBot<E> {
             log: Vec::new(),
             engine,
             enable_rule_based_agari_guard: true,
+            last_decision: None,
         }
+    }
+
+    pub fn last_decision(&self) -> Option<&EngineDecision> {
+        self.last_decision.as_ref()
     }
 
     pub fn react(&mut self, event: &bridge::Event) -> Result<Option<String>> {
@@ -99,6 +105,9 @@ impl<E: NativeEngine> NativeBot<E> {
         } else {
             decision.action
         };
+        let mut stored_decision = decision.clone();
+        stored_decision.action = action;
+        self.last_decision = Some(stored_decision);
 
         let reaction = decode_action(self.player_id, &self.state, cans, action, kan_decision)?;
         self.state.validate_reaction(&reaction)?;
@@ -132,7 +141,10 @@ fn decode_action(
     let akas_in_hand = state.akas_in_hand();
     let event = match action {
         0..=36 => {
-            ensure!(cans.can_discard, "engine chose discard without discard window");
+            ensure!(
+                cans.can_discard,
+                "engine chose discard without discard window"
+            );
             let pai = Tile::try_from(action)?;
             let tsumogiri = state.last_self_tsumo().is_some_and(|tile| tile == pai);
             riichi_mjai::Event::Dahai {
@@ -301,7 +313,7 @@ fn decode_kan(
 
 fn convert_event(event: &bridge::Event) -> Result<Option<riichi_mjai::Event>> {
     let event = match event {
-        bridge::Event::StartGame { .. } => return Ok(None),
+        bridge::Event::StartGame { .. } | bridge::Event::Dora { .. } => return Ok(None),
         bridge::Event::StartKyoku {
             bakaze,
             dora_marker,
@@ -386,7 +398,10 @@ fn convert_event(event: &bridge::Event) -> Result<Option<riichi_mjai::Event>> {
             pai: parse_tile(pai)?,
             consumed: vec_to_tile_array3(consumed)?,
         },
-        bridge::Event::EndKyoku => riichi_mjai::Event::EndKyoku,
+        bridge::Event::Hule { .. }
+        | bridge::Event::NoTile { .. }
+        | bridge::Event::LiuJu { .. }
+        | bridge::Event::EndKyoku => riichi_mjai::Event::EndKyoku,
         bridge::Event::EndGame => riichi_mjai::Event::EndGame,
     };
     Ok(Some(event))

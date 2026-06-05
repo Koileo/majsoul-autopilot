@@ -5,6 +5,12 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 liqi = { path = "../liqi" }
 mjai = { path = "../mjai" }
+mortal = { path = "../mortal" }
+protocol = { path = "../protocol" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync"] }

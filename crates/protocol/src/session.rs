@@ -3,9 +3,7 @@ use liqi::{
     codec::{decode_action_payload, notify_body, response_body},
     pb,
 };
-use mjai::{
-    bridge::{Bridge, Event},
-};
+use mjai::bridge::{Bridge, Event};
 use prost::Message;
 
 use crate::{
@@ -24,6 +22,7 @@ pub struct LoginSummary {
     pub account_id: u32,
     pub nickname: String,
     pub level_id: u32,
+    pub level_score: u32,
     pub rank_tier: u32,
     pub target_mode: Mode,
     pub target_room: Room,
@@ -105,6 +104,42 @@ impl ProtocolClient {
             route_prep: None,
             summary,
         })
+    }
+
+    pub fn set_match_target(&mut self, mode: Mode, room: Room) {
+        self.summary.target_mode = mode;
+        self.summary.target_room = room;
+    }
+
+    pub async fn refresh_account_summary(&mut self) -> Result<LoginSummary> {
+        let response: pb::ResAccountInfo = self
+            .socket
+            .request(
+                ".lq.Lobby.fetchAccountInfo",
+                &pb::ReqAccountInfo {
+                    account_id: self.summary.account_id,
+                },
+            )
+            .await?;
+        if let Some(error) = response.error {
+            if error.code != 0 {
+                return Err(anyhow!("fetchAccountInfo failed: code={}", error.code));
+            }
+        }
+        let account = response
+            .account
+            .ok_or_else(|| anyhow!("fetchAccountInfo response missing account"))?;
+        let level = account
+            .level
+            .ok_or_else(|| anyhow!("fetchAccountInfo response missing four-player level"))?;
+        let (target_mode, target_room) = target_mode_for_rank_level(level.id);
+        self.summary.nickname = account.nickname;
+        self.summary.level_id = level.id;
+        self.summary.level_score = level.score;
+        self.summary.rank_tier = rank_tier_from_level_id(level.id);
+        self.summary.target_mode = target_mode;
+        self.summary.target_room = target_room;
+        Ok(self.summary.clone())
     }
 
     pub async fn start_match(&mut self) -> Result<StartMatchResult> {
@@ -495,6 +530,7 @@ fn login_summary(response: pb::ResLogin) -> Result<LoginSummary> {
         account_id: response.account_id,
         nickname: account.nickname,
         level_id: level.id,
+        level_score: level.score,
         rank_tier: rank_tier_from_level_id(level.id),
         target_mode,
         target_room,

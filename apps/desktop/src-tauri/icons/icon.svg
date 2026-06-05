@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="174" y1="94" x2="830" y2="930" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22a889"/>
+      <stop offset="1" stop-color="#0e7f6a"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
+  <text x="512" y="660"
+    text-anchor="middle"
+    font-family="PingFang SC, Hiragino Sans, Noto Sans CJK SC, Arial, sans-serif"
+    font-size="462"
+    font-weight="900"
+    fill="#ffffff">雀</text>
+</svg>

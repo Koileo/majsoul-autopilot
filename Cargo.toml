@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "apps/desktop/src-tauri",
     "crates/autoplay",
     "crates/cli",
     "crates/liqi",
@@ -33,3 +34,4 @@ sha2 = "0.10"
 thiserror = "2.0"
 tokio = "1.48"
 tokio-tungstenite = "0.28"
+tauri = "2"

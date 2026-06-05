@@ -4,7 +4,7 @@
 
 A pure Rust Mahjong Soul autopilot powered by the Mortal model and the Liqi protocol.
 
-The project runs as a command-line tool. It logs in with an email account, joins ranked four-player rooms, connects to live games through the Liqi websocket protocol, and lets a Mortal model choose actions.
+The project provides a desktop GUI and a command-line tool. It logs in with an email account, joins ranked four-player rooms, connects to live games through the Liqi websocket protocol, and lets a Mortal model choose actions.
 
 ## Features
 
@@ -12,6 +12,7 @@ The project runs as a command-line tool. It logs in with an email account, joins
 - Four-player ranked matchmaking
 - Automatic room selection by rank
 - Native Mortal inference with Candle
+- Tauri desktop GUI for settings, status, logs, and table view
 - Reconnect support for active games
 - Riichi declaration handling with Mortal's two-step decision flow
 - Stale operation guard and discard acknowledgement checks
@@ -35,7 +36,27 @@ Prebuilt macOS Apple Silicon packages are available from GitHub Releases:
 
 [Download the latest release](https://github.com/happy-shine/majsoul-autopilot/releases/latest)
 
-The macOS arm64 package contains:
+Two macOS arm64 packages are published:
+
+- `majsoul-autopilot-gui-macos-arm64.zip`: desktop app plus the CLI binary
+- `majsoul-autopilot-rs-macos-arm64.zip`: CLI-only package with the original layout
+
+The GUI package contains:
+
+```text
+majsoul-autopilot-gui-macos-arm64/
+  Majsoul Autopilot.app
+  majsoul-autopilot-rs
+  settings.example.json
+  README.md
+  README.zh-CN.md
+  models/
+    mortal-298k/
+      model.safetensors
+      model_config.json
+```
+
+The CLI package contains:
 
 ```text
 majsoul-autopilot-rs-macos-arm64/
@@ -51,7 +72,9 @@ majsoul-autopilot-rs-macos-arm64/
 
 ## Quick Start
 
-Unzip the release package and enter the extracted directory:
+For the desktop app, unzip `majsoul-autopilot-gui-macos-arm64.zip` and open `Majsoul Autopilot.app`.
+
+For the CLI package, unzip `majsoul-autopilot-rs-macos-arm64.zip` and enter the extracted directory:
 
 ```bash
 cd majsoul-autopilot-rs-macos-arm64
@@ -74,6 +97,15 @@ Check the model:
 
 ```bash
 ./majsoul-autopilot-rs --settings settings.json check-model
+```
+
+When running from source instead of a release package, prepare the model first:
+
+```bash
+mkdir -p models
+curl -L -o models/mortal_298k.pth \
+  https://huggingface.co/VoidShine/mortal-298k/resolve/main/mortal_298k.pth
+python3 tools/export_mortal.py models/mortal_298k.pth models/mortal-298k
 ```
 
 Check login and target room:
@@ -144,6 +176,19 @@ The binary is generated at:
 target/release/majsoul-autopilot-rs
 ```
 
+Build the desktop app:
+
+```bash
+npm --prefix apps/desktop install
+npm --prefix apps/desktop run tauri -- build
+```
+
+Create macOS release archives:
+
+```bash
+tools/package_macos_release.sh
+```
+
 For local runs from source, prepare:
 
 ```text
@@ -179,6 +224,8 @@ crates/
   mortal/        Mortal inference and action decoding
   protocol/      lobby/game websocket client
   riichi-core/   riichi state and observation encoding
+apps/
+  desktop/       Tauri desktop app
 ```
 
 ## Disclaimer

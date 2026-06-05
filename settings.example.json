@@ -1,7 +1,20 @@
 {
   "model_path": "models/mortal-298k",
+  "ui_language": "zh",
   "autoplay_account": {
     "username": "",
     "password": ""
+  },
+  "autoplay": {
+    "room_policy": {
+      "type": "auto_highest"
+    },
+    "manual_room": "bronze",
+    "manual_mode": "four_player_east",
+    "action_interval_ms": {
+      "min": 800,
+      "max": 1600
+    },
+    "max_games": null
   }
 }
