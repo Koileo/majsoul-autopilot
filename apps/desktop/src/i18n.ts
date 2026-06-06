@@ -135,7 +135,8 @@ export const copy: Record<Language, Copy> = {
     modelImporting: "正在导入模型",
     modelImportOk: "模型已导入",
     modelImportFailed: "模型导入失败",
-    modelImportHelp: "仅支持 .safetensors 模型文件，不支持 .pth。请选择已导出的 model.safetensors，并确保同目录存在 model_config.json。",
+    modelImportHelp:
+      "只支持已导出的 .safetensors 模型目录：程序用 Rust/Candle 直接加载权重和 model_config.json；.pth 是 PyTorch 训练检查点，格式依赖 Python/PyTorch，不能在当前运行时直接读取。",
     previewImport: "Web 预览模式：跳过模型导入",
     match: "房间",
     autoHighest: "自动选择当前段位最高房间",
@@ -252,7 +253,8 @@ export const copy: Record<Language, Copy> = {
     modelImporting: "Importing model",
     modelImportOk: "Model imported",
     modelImportFailed: "Model import failed",
-    modelImportHelp: "Only .safetensors model files are supported. .pth is not supported. Choose an exported model.safetensors file and keep model_config.json in the same folder.",
+    modelImportHelp:
+      "Only exported .safetensors model directories are supported: the app loads weights and model_config.json directly through Rust/Candle. .pth is a PyTorch training checkpoint that depends on Python/PyTorch and cannot be read directly by this runtime.",
     previewImport: "Web preview: model import skipped",
     match: "Room",
     autoHighest: "Use highest room for current rank",
@@ -369,7 +371,8 @@ export const copy: Record<Language, Copy> = {
     modelImporting: "モデルをインポート中",
     modelImportOk: "モデルをインポートしました",
     modelImportFailed: "モデルのインポートに失敗",
-    modelImportHelp: ".safetensors のみ対応しています。.pth は非対応です。出力済みの model.safetensors を選び、同じフォルダに model_config.json を置いてください。",
+    modelImportHelp:
+      "エクスポート済みの .safetensors モデルディレクトリのみ対応しています。アプリは Rust/Candle で重みと model_config.json を直接読み込みます。.pth は Python/PyTorch 依存の学習チェックポイントなので、このランタイムでは直接読み込めません。",
     previewImport: "Web プレビュー: モデルインポートをスキップ",
     match: "部屋",
     autoHighest: "現在段位の最高部屋を自動選択",

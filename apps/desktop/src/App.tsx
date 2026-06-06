@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   Bot,
+  CircleHelp,
   CircleDot,
   Gauge,
   KeyRound,
@@ -477,8 +478,18 @@ export function App() {
             </label>
             <small title={settings.model_path}>{selectedModelChoice?.builtin ? t.modelBundled : t.modelImported}</small>
             <div className="modelImportActions">
-              <span className="modelImportHelp" title={t.modelImportHelp} aria-label={t.modelImportHelp}>
-                ❔
+              <span className="modelImportHelpWrap">
+                <button
+                  className="modelImportHelp"
+                  type="button"
+                  aria-label={t.modelImportHelp}
+                  aria-describedby="model-import-help"
+                >
+                  <CircleHelp size={15} />
+                </button>
+                <span id="model-import-help" className="modelImportTooltip" role="tooltip">
+                  {t.modelImportHelp}
+                </span>
               </span>
               <button
                 disabled={modelImporting || runtimeRunning || launching}
