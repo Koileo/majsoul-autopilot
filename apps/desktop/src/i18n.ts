@@ -27,7 +27,15 @@ type Copy = {
   rank: string;
   target: string;
   model: string;
-  modelPath: string;
+  modelSelect: string;
+  modelBundled: string;
+  modelImported: string;
+  modelImport: string;
+  modelImporting: string;
+  modelImportOk: string;
+  modelImportFailed: string;
+  modelImportHelp: string;
+  previewImport: string;
   match: string;
   autoHighest: string;
   manualRoom: string;
@@ -120,7 +128,15 @@ export const copy: Record<Language, Copy> = {
     rank: "段位",
     target: "目标",
     model: "模型",
-    modelPath: "模型路径",
+    modelSelect: "选择模型",
+    modelBundled: "内置模型",
+    modelImported: "已导入模型",
+    modelImport: "导入 safetensors",
+    modelImporting: "正在导入模型",
+    modelImportOk: "模型已导入",
+    modelImportFailed: "模型导入失败",
+    modelImportHelp: "仅支持 .safetensors 模型文件，不支持 .pth。请选择已导出的 model.safetensors，并确保同目录存在 model_config.json。",
+    previewImport: "Web 预览模式：跳过模型导入",
     match: "房间",
     autoHighest: "自动选择当前段位最高房间",
     manualRoom: "手动房间",
@@ -229,7 +245,15 @@ export const copy: Record<Language, Copy> = {
     rank: "Rank",
     target: "Target",
     model: "Model",
-    modelPath: "Model path",
+    modelSelect: "Select model",
+    modelBundled: "Bundled model",
+    modelImported: "Imported model",
+    modelImport: "Import safetensors",
+    modelImporting: "Importing model",
+    modelImportOk: "Model imported",
+    modelImportFailed: "Model import failed",
+    modelImportHelp: "Only .safetensors model files are supported. .pth is not supported. Choose an exported model.safetensors file and keep model_config.json in the same folder.",
+    previewImport: "Web preview: model import skipped",
     match: "Room",
     autoHighest: "Use highest room for current rank",
     manualRoom: "Manual room",
@@ -338,7 +362,15 @@ export const copy: Record<Language, Copy> = {
     rank: "段位",
     target: "目標",
     model: "モデル",
-    modelPath: "モデルパス",
+    modelSelect: "モデルを選択",
+    modelBundled: "内蔵モデル",
+    modelImported: "インポート済みモデル",
+    modelImport: "safetensors をインポート",
+    modelImporting: "モデルをインポート中",
+    modelImportOk: "モデルをインポートしました",
+    modelImportFailed: "モデルのインポートに失敗",
+    modelImportHelp: ".safetensors のみ対応しています。.pth は非対応です。出力済みの model.safetensors を選び、同じフォルダに model_config.json を置いてください。",
+    previewImport: "Web プレビュー: モデルインポートをスキップ",
     match: "部屋",
     autoHighest: "現在段位の最高部屋を自動選択",
     manualRoom: "手動部屋",

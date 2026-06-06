@@ -87,7 +87,7 @@ impl Default for AutoplaySettings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            model_path: "models/mortal-298k".to_string(),
+            model_path: "models/mortal".to_string(),
             ui_language: default_ui_language(),
             autoplay_account: Account::default(),
             autoplay: AutoplaySettings::default(),
@@ -204,7 +204,7 @@ mod tests {
     fn missing_settings_file_loads_default_without_validation() {
         let path = temp_settings_path("missing");
         let settings = read_settings_unchecked(&path).unwrap();
-        assert_eq!(settings.model_path, "models/mortal-298k");
+        assert_eq!(settings.model_path, "models/mortal");
         assert!(settings.autoplay_account.username.is_empty());
         assert!(settings.autoplay_account.password.is_empty());
     }
@@ -234,7 +234,7 @@ mod tests {
         fs::write(
             &path,
             r#"{
-  "model_path": "models/mortal-298k",
+  "model_path": "models/mortal",
   "ui_language": "ja",
   "autoplay_account": {
     "username": "user@example.com",

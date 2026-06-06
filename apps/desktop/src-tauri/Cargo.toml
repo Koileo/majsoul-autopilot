@@ -18,7 +18,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 anyhow.workspace = true
 autoplay = { path = "../../../crates/autoplay" }
+mortal = { path = "../../../crates/mortal" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tauri.workspace = true
+tauri-plugin-dialog = "2"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }

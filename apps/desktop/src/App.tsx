@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   Bot,
@@ -14,11 +15,22 @@ import {
   Shield,
   Square,
   TimerReset,
+  Upload,
 } from "lucide-react";
 import { GameTable } from "./GameTable";
 import { copy, languageNames } from "./i18n";
 import { useAppStore } from "./store";
-import type { CoreEventBatch, Language, ModeChoice, RoomChoice, RuntimeSnapshot, Settings } from "./types";
+import type {
+  CoreEventBatch,
+  Language,
+  ModeChoice,
+  ModelChoice,
+  ModelImportResult,
+  RoomChoice,
+  RuntimeSnapshot,
+  Settings,
+} from "./types";
+import { defaultSettings } from "./types";
 
 function isTauriRuntime() {
   return "__TAURI_INTERNALS__" in window;
@@ -79,6 +91,10 @@ export function App() {
   const viewportScale = useViewportScale();
   const [settingsReady, setSettingsReady] = useState(() => !isTauriRuntime());
   const [launching, setLaunching] = useState(false);
+  const [modelImporting, setModelImporting] = useState(false);
+  const [modelChoices, setModelChoices] = useState<ModelChoice[]>(() => [
+    { label: "mortal", model_path: defaultSettings.model_path, builtin: true },
+  ]);
   const [runtimeRunning, setRuntimeRunning] = useState(false);
   const [emergencyConfirmOpen, setEmergencyConfirmOpen] = useState(false);
   const lastSavedSettings = useRef(JSON.stringify(normalizeSettings(settings)));
@@ -101,6 +117,13 @@ export function App() {
         setSettingsReady(true);
       });
   }, [ingest, setSettings]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    void refreshModelChoices();
+  }, []);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
@@ -198,7 +221,10 @@ export function App() {
   }, [ingest, settings, settingsReady, t.saveFailed]);
 
   const canStart =
-    !launching && !runtimeRunning && (status === "idle" || status === "stopped" || status === "error");
+    !launching &&
+    !modelImporting &&
+    !runtimeRunning &&
+    (status === "idle" || status === "stopped" || status === "error");
   const inGame = ["logging_in", "matching", "reconnecting", "in_game", "stopping_after_game"].includes(status);
   const stopAlreadyScheduled = stopScheduled || status === "stopping_after_game";
   const statusText = t.status[status] ?? status;
@@ -207,6 +233,8 @@ export function App() {
     account?.target_room && account?.target_mode
       ? `${t.rooms[account.target_room]} ${t.modes[account.target_mode]}`
       : "-";
+  const visibleModelChoices = ensureCurrentModelChoice(modelChoices, settings.model_path);
+  const selectedModelChoice = visibleModelChoices.find((choice) => choice.model_path === settings.model_path);
 
   async function saveSettings(nextSettings = settings) {
     const normalized = normalizeSettings(nextSettings);
@@ -222,6 +250,55 @@ export function App() {
     } catch (error) {
       ingest({ type: "log", level: "error", message: `${t.saveFailed}: ${String(error)}` });
       throw error;
+    }
+  }
+
+  async function refreshModelChoices() {
+    if (!isTauriRuntime()) {
+      setModelChoices([{ label: "mortal", model_path: defaultSettings.model_path, builtin: true }]);
+      return;
+    }
+    try {
+      const choices = await invoke<ModelChoice[]>("list_models");
+      setModelChoices(mergeModelChoices(choices));
+    } catch (error) {
+      ingest({ type: "log", level: "warn", message: `${t.modelImportFailed}: ${String(error)}` });
+    }
+  }
+
+  async function importModel() {
+    if (modelImporting || runtimeRunning || launching) {
+      return;
+    }
+    if (!isTauriRuntime()) {
+      ingest({ type: "log", level: "info", message: t.previewImport });
+      return;
+    }
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: t.modelImport,
+        filters: [{ name: "safetensors", extensions: ["safetensors"] }],
+      });
+      if (typeof selected !== "string") {
+        return;
+      }
+      setModelImporting(true);
+      ingest({ type: "log", level: "info", message: t.modelImporting });
+      const result = await invoke<ModelImportResult>("import_model", { sourcePath: selected });
+      await refreshModelChoices();
+      const nextSettings = normalizeSettings({ ...settings, model_path: result.model_path });
+      await saveSettings(nextSettings);
+      ingest({
+        type: "log",
+        level: "info",
+        message: `${t.modelImportOk}: ${result.model_name}`,
+      });
+    } catch (error) {
+      ingest({ type: "log", level: "error", message: `${t.modelImportFailed}: ${String(error)}` });
+    } finally {
+      setModelImporting(false);
     }
   }
 
@@ -383,12 +460,35 @@ export function App() {
             />
           </Field>
           <PanelTitle icon={<Bot size={17} />} label={t.model} />
-          <Field label={t.modelPath}>
-            <input
-              value={settings.model_path}
-              onChange={(event) => updateSettings({ ...settings, model_path: event.target.value })}
-            />
-          </Field>
+          <div className="modelImportCard">
+            <label className="modelSelectRow">
+              <span>{t.modelSelect}</span>
+              <select
+                value={settings.model_path}
+                disabled={modelImporting || runtimeRunning || launching}
+                onChange={(event) => updateSettings({ ...settings, model_path: event.target.value })}
+              >
+                {visibleModelChoices.map((choice) => (
+                  <option key={choice.model_path} value={choice.model_path}>
+                    {choice.builtin ? `${choice.label} (${t.modelBundled})` : choice.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <small title={settings.model_path}>{selectedModelChoice?.builtin ? t.modelBundled : t.modelImported}</small>
+            <div className="modelImportActions">
+              <span className="modelImportHelp" title={t.modelImportHelp} aria-label={t.modelImportHelp}>
+                ❔
+              </span>
+              <button
+                disabled={modelImporting || runtimeRunning || launching}
+                onClick={() => void importModel()}
+                type="button"
+              >
+                <Upload size={15} /> {modelImporting ? t.modelImporting : t.modelImport}
+              </button>
+            </div>
+          </div>
 
           <PanelTitle icon={<RadioTower size={17} />} label={t.match} />
           <label className="toggleRow">
@@ -702,6 +802,35 @@ function playerRelation(
   if (relative === 1) return labels.rightPlayer;
   if (relative === 2) return labels.topPlayer;
   return labels.leftPlayer;
+}
+
+function mergeModelChoices(choices: ModelChoice[]) {
+  return ensureCurrentModelChoice(choices, defaultSettings.model_path);
+}
+
+function ensureCurrentModelChoice(choices: ModelChoice[], currentPath: string) {
+  const deduped: ModelChoice[] = [];
+  for (const choice of choices) {
+    if (!deduped.some((existing) => existing.model_path === choice.model_path)) {
+      deduped.push(choice);
+    }
+  }
+  if (deduped.some((choice) => choice.model_path === currentPath)) {
+    return deduped;
+  }
+  return [
+    ...deduped,
+    {
+      label: modelPathLabel(currentPath),
+      model_path: currentPath,
+      builtin: currentPath === defaultSettings.model_path,
+    },
+  ];
+}
+
+function modelPathLabel(path: string) {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || path || "model";
 }
 
 function formatActionLabel(

@@ -32,7 +32,7 @@ try {
     const callbacks = {};
     let nextCallbackId = 1;
     const settings = {
-      model_path: "models/mortal-298k",
+      model_path: "models/mortal",
       ui_language: "zh",
       autoplay_account: { username: "test@example.com", password: "password" },
       autoplay: {

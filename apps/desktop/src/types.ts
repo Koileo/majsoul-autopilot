@@ -50,6 +50,17 @@ export type CoreEventBatch = {
   events: CoreEventRecord[];
 };
 
+export type ModelImportResult = {
+  model_path: string;
+  model_name: string;
+};
+
+export type ModelChoice = {
+  label: string;
+  model_path: string;
+  builtin: boolean;
+};
+
 export type BridgeEvent = {
   type: string;
   [key: string]: unknown;
@@ -145,7 +156,7 @@ export type CoreEvent =
   | { type: "runtime_error"; message: string };
 
 export const defaultSettings: Settings = {
-  model_path: "models/mortal-298k",
+  model_path: "models/mortal",
   ui_language: "zh",
   autoplay_account: {
     username: "",

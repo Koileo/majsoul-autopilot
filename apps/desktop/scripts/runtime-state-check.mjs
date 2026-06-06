@@ -35,7 +35,7 @@ try {
     let nextCallbackId = 1;
     let runtimeRunning = false;
     const settings = {
-      model_path: "models/mortal-298k",
+      model_path: "models/mortal",
       ui_language: "zh",
       autoplay_account: {
         username: "test@example.com",
@@ -214,13 +214,25 @@ try {
   if (!bodyText.includes("状态: 登录中")) {
     throw new Error("runtime status transition was not logged");
   }
+  const modelImportText = await page.locator(".modelImportCard").innerText();
+  if (
+    !modelImportText.includes("导入 safetensors") ||
+    !modelImportText.includes("仅支持 .safetensors") ||
+    modelImportText.includes("导入模型目录") ||
+    modelImportText.includes("导入模型文件") ||
+    (await page.locator(".modelImportCard input").count()) !== 0 ||
+    (await page.locator(".modelImportCard select").count()) !== 1 ||
+    (await page.locator(".modelImportCard button").count()) !== 1
+  ) {
+    throw new Error(`model panel should use one dropdown plus one file import button: ${modelImportText}`);
+  }
   await page.waitForTimeout(900);
   const syncedText = await page.locator("body").innerText();
   for (const expected of [
     "FrontendOk",
     "雀杰一星 542分",
     "金之间 四人南",
-    "东2",
+    "东二局",
     "0本场",
     "0供托",
     "30200",
@@ -240,7 +252,7 @@ try {
   await page.getByRole("button", { name: "English" }).click();
   await page.waitForTimeout(250);
   const englishText = await page.locator("body").innerText();
-  for (const expected of ["FrontendOk", "Expert 1 · 542 pts", "Gold 4-player South", "East2", "Discard North"]) {
+  for (const expected of ["FrontendOk", "Expert 1 · 542 pts", "Gold 4-player South", "East 2", "Discard North"]) {
     if (!englishText.includes(expected)) {
       throw new Error(`English UI did not localize ${expected}: ${englishText}`);
     }
@@ -288,7 +300,7 @@ try {
       window.__invokeCalls.push({ command, args });
       if (command === "load_settings") {
         return {
-          model_path: "models/mortal-298k",
+          model_path: "models/mortal",
           ui_language: "zh",
           autoplay_account: { username: "test@example.com", password: "password" },
           autoplay: {

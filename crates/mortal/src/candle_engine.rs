@@ -3,8 +3,9 @@ use crate::native::{EngineDecision, NativeEngine, Observation};
 use anyhow::{anyhow, ensure, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::{
-    batch_norm, conv1d, conv1d_no_bias, linear, ops::{mish, sigmoid}, BatchNorm, BatchNormConfig,
-    Conv1d, Conv1dConfig, Linear, Module, ModuleT, VarBuilder,
+    batch_norm, conv1d, conv1d_no_bias, linear,
+    ops::{mish, sigmoid},
+    BatchNorm, BatchNormConfig, Conv1d, Conv1dConfig, Linear, Module, ModuleT, VarBuilder,
 };
 use std::path::Path;
 
@@ -22,9 +23,8 @@ impl CandleMortalEngine {
         ensure!(config.version == 4, "only Mortal v4 is supported");
         let device = Device::Cpu;
         let model_path = export_dir.join("model.safetensors");
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device)?
-        };
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device)? };
         let net = MortalNet::load(&config, vb)?;
         Ok(Self {
             config,
@@ -47,7 +47,10 @@ impl NativeEngine for CandleMortalEngine {
         let masks = observations
             .iter()
             .map(|obs| {
-                ensure!(obs.channels == channels && obs.width == width, "mixed obs shapes");
+                ensure!(
+                    obs.channels == channels && obs.width == width,
+                    "mixed obs shapes"
+                );
                 ensure!(obs.mask.len() == 46, "mask length must be 46");
                 values.extend_from_slice(&obs.values);
                 Ok(obs.mask.clone())
@@ -60,7 +63,10 @@ impl NativeEngine for CandleMortalEngine {
     }
 }
 
-fn logits_to_decisions(logits: Vec<Vec<f32>>, masks: Vec<Vec<bool>>) -> Result<Vec<EngineDecision>> {
+fn logits_to_decisions(
+    logits: Vec<Vec<f32>>,
+    masks: Vec<Vec<bool>>,
+) -> Result<Vec<EngineDecision>> {
     logits
         .into_iter()
         .zip(masks)
@@ -153,13 +159,7 @@ impl ResNet {
             padding: 1,
             ..Default::default()
         };
-        let input = conv1d_no_bias(
-            1012,
-            config.conv_channels,
-            3,
-            conv_cfg,
-            vb.pp("0"),
-        )?;
+        let input = conv1d_no_bias(1012, config.conv_channels, 3, conv_cfg, vb.pp("0"))?;
         let blocks = (0..config.num_blocks)
             .map(|idx| ResBlock::load(config.conv_channels, vb.pp((idx + 1).to_string())))
             .collect::<Result<Vec<_>>>()?;

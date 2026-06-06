@@ -30,6 +30,14 @@
       "icons/icon.icns",
       "icons/icon.png",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "../../../models/mortal": "models/mortal",
+      "../../../settings.example.json": "settings.example.json"
+    },
+    "macOS": {
+      "signingIdentity": "-",
+      "hardenedRuntime": false
+    }
   }
 }

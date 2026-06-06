@@ -34,7 +34,7 @@ const baseAccount = {
 };
 
 const settings = {
-  model_path: "models/mortal-298k",
+  model_path: "models/mortal",
   ui_language: "zh",
   autoplay_account: { username: "370501542@qq.com", password: "password" },
   autoplay: {

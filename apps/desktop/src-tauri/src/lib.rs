@@ -1,12 +1,14 @@
+use anyhow::{anyhow, Context};
 use autoplay::{
     events::{CoreEvent, EventSink},
     runtime::{AutoplayController, RuntimeOptions},
     settings::{read_settings_unchecked, validate_settings, write_settings, Settings},
 };
+use mortal::model_import::{ensure_exported_model_dir, import_model_file};
 use serde::Serialize;
 use std::{
     collections::VecDeque,
-    fs::{File, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
     sync::{
@@ -50,6 +52,19 @@ struct CoreEventBatch {
     events: Vec<CoreEventRecord>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct ModelImportResult {
+    model_path: String,
+    model_name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ModelChoice {
+    label: String,
+    model_path: String,
+    builtin: bool,
+}
+
 #[tauri::command]
 fn load_settings(state: State<'_, GuiState>) -> Result<Settings, String> {
     read_settings_unchecked(&state.settings_path).map_err(|err| err.to_string())
@@ -58,6 +73,25 @@ fn load_settings(state: State<'_, GuiState>) -> Result<Settings, String> {
 #[tauri::command]
 fn save_settings(state: State<'_, GuiState>, settings: Settings) -> Result<(), String> {
     write_settings(&state.settings_path, &settings).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+async fn import_model(
+    state: State<'_, GuiState>,
+    source_path: String,
+) -> Result<ModelImportResult, String> {
+    let settings_path = state.settings_path.clone();
+    tokio::task::spawn_blocking(move || {
+        import_model_from_source(Path::new(&source_path), &settings_path)
+    })
+    .await
+    .map_err(|err| err.to_string())?
+    .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn list_models(state: State<'_, GuiState>) -> Result<Vec<ModelChoice>, String> {
+    Ok(list_models_for_settings(&state.settings_path))
 }
 
 #[tauri::command]
@@ -105,6 +139,7 @@ fn get_core_event_batch(state: State<'_, GuiState>, after: u64) -> CoreEventBatc
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
             let settings_path = resolve_settings_path(app)?;
@@ -129,6 +164,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_settings,
             save_settings,
+            import_model,
+            list_models,
             start_autoplay,
             stop_after_current_game,
             emergency_stop,
@@ -186,6 +223,86 @@ fn runtime_log_path_for_settings(settings_path: &Path) -> PathBuf {
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("logs/runtime/gui_autoplay.log")
+}
+
+fn import_model_from_source(
+    source: &Path,
+    settings_path: &Path,
+) -> anyhow::Result<ModelImportResult> {
+    if !source.exists() {
+        return Err(anyhow!("model source not found: {}", source.display()));
+    }
+    if source.is_dir() {
+        return Err(anyhow!(
+            "model directory import is not supported; choose a .safetensors file"
+        ));
+    }
+
+    let store_root = imported_model_store_dir(settings_path);
+    fs::create_dir_all(&store_root)
+        .with_context(|| format!("create imported model store {}", store_root.display()))?;
+
+    let model_name = source
+        .file_stem()
+        .or_else(|| source.file_name())
+        .and_then(|name| name.to_str())
+        .unwrap_or("model");
+    let output_dir = store_root.join(format!(
+        "{}-{}",
+        mortal::model_import::sanitize_model_name(model_name),
+        now_ms()
+    ));
+    let result = import_model_file(source, &output_dir).map(|result| ModelImportResult {
+        model_path: result.model_path.display().to_string(),
+        model_name: result.model_name,
+    });
+
+    if result.is_err() {
+        let _ = fs::remove_dir_all(&output_dir);
+    }
+    result
+}
+
+fn imported_model_store_dir(settings_path: &Path) -> PathBuf {
+    settings_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("models/imported")
+}
+
+fn list_models_for_settings(settings_path: &Path) -> Vec<ModelChoice> {
+    let mut models = vec![ModelChoice {
+        label: "mortal".to_string(),
+        model_path: "models/mortal".to_string(),
+        builtin: true,
+    }];
+
+    let store_root = imported_model_store_dir(settings_path);
+    let Ok(entries) = fs::read_dir(store_root) else {
+        return models;
+    };
+    let mut imported = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_dir() || ensure_exported_model_dir(&path).is_err() {
+                return None;
+            }
+            let label = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("imported-model")
+                .to_string();
+            Some(ModelChoice {
+                label,
+                model_path: path.display().to_string(),
+                builtin: false,
+            })
+        })
+        .collect::<Vec<_>>();
+    imported.sort_by(|a, b| a.label.cmp(&b.label));
+    models.extend(imported);
+    models
 }
 
 fn open_runtime_log(path: &Path) -> Result<File, Box<dyn std::error::Error>> {
@@ -316,6 +433,105 @@ mod tests {
         let path = runtime_log_path_for_settings(&root.join("settings.json"));
 
         assert_eq!(path, root.join("logs/runtime/gui_autoplay.log"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn imported_model_dir_lives_next_to_settings() {
+        let root = temp_dir("model-store");
+        let settings = root.join("settings.json");
+
+        assert_eq!(
+            imported_model_store_dir(&settings),
+            root.join("models/imported")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn model_directory_import_is_rejected() {
+        let root = temp_dir("import-dir");
+        let source = root.join("source-model");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("model.safetensors"), b"weights").unwrap();
+        fs::write(source.join("model_config.json"), b"{}").unwrap();
+
+        let error = import_model_from_source(&source, &root.join("settings.json"))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("model directory import is not supported"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn model_list_includes_builtin_and_imported_exports() {
+        let root = temp_dir("model-list");
+        let store = imported_model_store_dir(&root.join("settings.json"));
+        let imported = store.join("custom-model");
+        fs::create_dir_all(&imported).unwrap();
+        fs::write(imported.join("model.safetensors"), b"weights").unwrap();
+        fs::write(imported.join("model_config.json"), b"{}").unwrap();
+        fs::create_dir_all(store.join("broken-model")).unwrap();
+
+        let models = list_models_for_settings(&root.join("settings.json"));
+
+        assert_eq!(models.len(), 2);
+        assert!(models[0].builtin);
+        assert_eq!(models[0].label, "mortal");
+        assert_eq!(models[0].model_path, "models/mortal");
+        assert_eq!(models[1].label, "custom-model");
+        assert!(!models[1].builtin);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn safetensors_file_uses_sibling_config() {
+        let root = temp_dir("import-safetensors");
+        let source = root.join("mortal.safetensors");
+        fs::write(&source, b"weights").unwrap();
+        fs::write(root.join("model_config.json"), b"{\"version\":4}").unwrap();
+
+        let result = import_model_from_source(&source, &root.join("settings.json")).unwrap();
+        let imported = PathBuf::from(result.model_path);
+
+        assert_eq!(result.model_name, "mortal");
+        assert_eq!(
+            fs::read(imported.join("model.safetensors")).unwrap(),
+            b"weights"
+        );
+        assert_eq!(
+            fs::read(imported.join("model_config.json")).unwrap(),
+            b"{\"version\":4}"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn unsupported_model_file_is_rejected() {
+        let root = temp_dir("import-bad-extension");
+        let source = root.join("mortal.txt");
+        fs::write(&source, b"nope").unwrap();
+
+        let error = import_model_from_source(&source, &root.join("settings.json"))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("unsupported model file .txt"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn pth_model_file_is_rejected() {
+        let root = temp_dir("import-pth");
+        let source = root.join("mortal.pth");
+        fs::write(&source, b"checkpoint").unwrap();
+
+        let error = import_model_from_source(&source, &root.join("settings.json"))
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("only .safetensors"));
         let _ = fs::remove_dir_all(root);
     }
 

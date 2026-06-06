@@ -357,6 +357,81 @@ select:disabled {
   gap: 10px;
 }
 
+.modelImportCard {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid rgba(23, 125, 105, 0.16);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(248, 252, 250, 0.92), rgba(241, 248, 246, 0.82));
+}
+
+.modelImportCard > span,
+.modelSelectRow span {
+  color: #6d7e79;
+  font-size: 11px;
+}
+
+.modelSelectRow {
+  display: grid;
+  gap: 6px;
+}
+
+.modelImportCard small {
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #126b5a;
+  font-size: 11px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelSelectRow select {
+  width: 100%;
+  min-width: 0;
+}
+
+.modelImportActions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 7px;
+  margin-top: 3px;
+}
+
+.modelImportHelp {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(23, 125, 105, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #5d706c;
+  cursor: help;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.modelImportActions button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-color: rgba(23, 125, 105, 0.22);
+  background: linear-gradient(180deg, #f6fbf9 0%, #e7f4f0 100%);
+  color: #126b5a;
+  font-weight: 800;
+}
+
 .toggleRow {
   min-height: 38px;
   display: grid;

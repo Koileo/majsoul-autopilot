@@ -305,13 +305,7 @@ pub async fn run_autoplay(
         };
         games_done += completed;
         sink(CoreEvent::GameCompleted { games_done });
-        if let Err(err) = refresh_account_snapshot_after_game(
-            &mut client,
-            &settings,
-            &sink,
-        )
-        .await
-        {
+        if let Err(err) = refresh_account_snapshot_after_game(&mut client, &settings, &sink).await {
             emit_log(
                 &sink,
                 LogLevel::Warn,
@@ -1072,6 +1066,26 @@ fn resolve_model_path_from(
     if let Some(exe_parent) = current_exe.and_then(Path::parent) {
         for ancestor in exe_parent.ancestors() {
             push_unique_candidate(&mut candidates, ancestor.join(raw));
+            if ancestor.file_name().is_some_and(|name| name == "bin") {
+                if let Some(prefix) = ancestor.parent() {
+                    push_unique_candidate(
+                        &mut candidates,
+                        prefix.join("lib/Majsoul Autopilot").join(raw),
+                    );
+                }
+            }
+            if ancestor.file_name().is_some_and(|name| name == "Contents") {
+                push_unique_candidate(&mut candidates, ancestor.join("Resources").join(raw));
+            }
+            if ancestor
+                .extension()
+                .is_some_and(|extension| extension == "app")
+            {
+                push_unique_candidate(
+                    &mut candidates,
+                    ancestor.join("Contents/Resources").join(raw),
+                );
+            }
         }
     }
 
@@ -1205,15 +1219,46 @@ mod tests {
     #[test]
     fn relative_model_path_resolves_from_executable_ancestor() {
         let root = temp_dir("model-ancestor");
-        let model = root.join("models/mortal-298k");
+        let model = root.join("models/mortal");
         write_fake_model(&model);
         let exe = root.join("target/release/bundle/macos/Majsoul Autopilot.app/Contents/MacOS/app");
         fs::create_dir_all(exe.parent().unwrap()).unwrap();
         fs::write(&exe, "").unwrap();
 
         let resolved =
-            resolve_model_path_from("models/mortal-298k", None, Path::new("/"), Some(&exe))
-                .unwrap();
+            resolve_model_path_from("models/mortal", None, Path::new("/"), Some(&exe)).unwrap();
+
+        assert_eq!(resolved, model);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn relative_model_path_resolves_from_macos_app_resources() {
+        let root = temp_dir("model-app-resources");
+        let model = root.join("Majsoul Autopilot.app/Contents/Resources/models/mortal");
+        write_fake_model(&model);
+        let exe = root.join("Majsoul Autopilot.app/Contents/MacOS/app");
+        fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        fs::write(&exe, "").unwrap();
+
+        let resolved =
+            resolve_model_path_from("models/mortal", None, Path::new("/"), Some(&exe)).unwrap();
+
+        assert_eq!(resolved, model);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn relative_model_path_resolves_from_linux_deb_resources() {
+        let root = temp_dir("model-linux-deb-resources");
+        let model = root.join("usr/lib/Majsoul Autopilot/models/mortal");
+        write_fake_model(&model);
+        let exe = root.join("usr/bin/majsoul-autopilot-desktop");
+        fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        fs::write(&exe, "").unwrap();
+
+        let resolved =
+            resolve_model_path_from("models/mortal", None, Path::new("/"), Some(&exe)).unwrap();
 
         assert_eq!(resolved, model);
         let _ = fs::remove_dir_all(root);
@@ -1222,17 +1267,13 @@ mod tests {
     #[test]
     fn relative_model_path_resolves_from_settings_parent() {
         let root = temp_dir("model-settings");
-        let model = root.join("models/mortal-298k");
+        let model = root.join("models/mortal");
         write_fake_model(&model);
         let settings_path = root.join("settings.json");
 
-        let resolved = resolve_model_path_from(
-            "models/mortal-298k",
-            Some(&settings_path),
-            Path::new("/"),
-            None,
-        )
-        .unwrap();
+        let resolved =
+            resolve_model_path_from("models/mortal", Some(&settings_path), Path::new("/"), None)
+                .unwrap();
 
         assert_eq!(resolved, model);
         let _ = fs::remove_dir_all(root);
