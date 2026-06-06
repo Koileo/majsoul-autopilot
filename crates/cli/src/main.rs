@@ -2,12 +2,12 @@ use anyhow::{anyhow, Context, Result};
 use autoplay::{
     events::{CoreEvent, EventSink, LogLevel},
     runtime::{resolve_model_path, run_autoplay, RuntimeOptions},
-    settings::{read_settings, Account, AutoplaySettings, Settings},
+    settings::{read_settings_unchecked, validate_settings, Account, AutoplaySettings, Settings},
 };
 use clap::{Parser, Subcommand};
 use mortal::{
     candle_engine::CandleMortalEngine,
-    model_import::{ensure_exported_model_dir, import_model_file},
+    model_import::ensure_exported_model_dir,
     native::{NativeEngine, Observation},
 };
 use protocol::session;
@@ -26,6 +26,14 @@ struct Cli {
     #[arg(long, default_value = "settings.json")]
     settings: PathBuf,
 
+    #[arg(
+        long,
+        global = true,
+        value_name = "MODEL_DIR",
+        help = "Override model directory containing model.safetensors and model_config.json"
+    )]
+    model: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -36,11 +44,6 @@ enum Command {
     CheckLogin,
     #[command(about = "Check the model configured in settings.json")]
     CheckModel,
-    #[command(about = "Model utilities for checking and importing safetensors models")]
-    Model {
-        #[command(subcommand)]
-        command: ModelCommand,
-    },
     #[command(about = "Validate a replay fixture path")]
     ReplayFixture { fixture: PathBuf },
     #[command(about = "Run one account from settings.json")]
@@ -62,29 +65,6 @@ enum Command {
             help = "Maximum parallel accounts; 0 means all"
         )]
         concurrency: usize,
-    },
-}
-
-#[derive(Subcommand)]
-enum ModelCommand {
-    #[command(about = "Check an exported Mortal model directory")]
-    Check {
-        #[arg(long, help = "Model directory; defaults to settings.json model_path")]
-        model: Option<PathBuf>,
-    },
-    #[command(about = "Import a .safetensors model file into model directory form")]
-    Import {
-        #[arg(long, help = "Input .safetensors file")]
-        input: PathBuf,
-
-        #[arg(
-            long,
-            help = "Output directory containing model.safetensors and model_config.json"
-        )]
-        output: PathBuf,
-
-        #[arg(long, help = "Replace output directory if it already exists")]
-        force: bool,
     },
 }
 
@@ -121,7 +101,11 @@ struct AccountRun {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut settings = read_settings(&cli.settings)?;
+    let mut settings = read_settings_unchecked(&cli.settings)?;
+    apply_model_override(&mut settings, cli.model.as_deref());
+    if command_requires_valid_settings(&cli.command) {
+        validate_settings(&settings)?;
+    }
 
     match cli.command {
         Command::CheckLogin => {
@@ -144,22 +128,6 @@ async fn main() -> Result<()> {
         Command::CheckModel => {
             check_model(&settings.model_path, Some(&cli.settings))?;
         }
-        Command::Model { command } => match command {
-            ModelCommand::Check { model } => {
-                let raw = model
-                    .as_ref()
-                    .map(|path| path.display().to_string())
-                    .unwrap_or_else(|| settings.model_path.clone());
-                check_model(&raw, Some(&cli.settings))?;
-            }
-            ModelCommand::Import {
-                input,
-                output,
-                force,
-            } => {
-                import_model(&input, &output, force)?;
-            }
-        },
         Command::ReplayFixture { fixture } => {
             if !fixture.exists() {
                 return Err(anyhow!("fixture not found: {}", fixture.display()));
@@ -195,6 +163,16 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+fn command_requires_valid_settings(command: &Command) -> bool {
+    matches!(command, Command::CheckLogin | Command::Run { .. })
+}
+
+fn apply_model_override(settings: &mut Settings, model: Option<&Path>) {
+    if let Some(model) = model {
+        settings.model_path = model.display().to_string();
+    }
+}
+
 fn check_model(raw_path: &str, settings_path: Option<&Path>) -> Result<()> {
     let path = resolve_model_path(raw_path, settings_path)?;
     if !path.exists() {
@@ -216,25 +194,6 @@ fn check_model(raw_path: &str, settings_path: Option<&Path>) -> Result<()> {
         path.display(),
         decisions[0].action,
         engine.version()
-    );
-    Ok(())
-}
-
-fn import_model(input: &Path, output: &Path, force: bool) -> Result<()> {
-    if output.exists() {
-        if !force {
-            return Err(anyhow!(
-                "output already exists: {}; pass --force to replace it",
-                output.display()
-            ));
-        }
-        fs::remove_dir_all(output).with_context(|| format!("remove {}", output.display()))?;
-    }
-    let result = import_model_file(input, output)?;
-    println!(
-        "model imported: input={} output={}",
-        input.display(),
-        result.model_path.display()
     );
     Ok(())
 }
@@ -391,6 +350,51 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("majsoul-cli-{name}-{stamp}.json"))
+    }
+
+    #[test]
+    fn check_model_does_not_require_login_credentials() {
+        assert!(!command_requires_valid_settings(&Command::CheckModel));
+        assert!(!command_requires_valid_settings(&Command::RunMany {
+            accounts: PathBuf::from("accounts.json"),
+            max_games: None,
+            concurrency: 0,
+        }));
+    }
+
+    #[test]
+    fn single_account_run_commands_require_login_credentials() {
+        assert!(command_requires_valid_settings(&Command::CheckLogin));
+        assert!(command_requires_valid_settings(&Command::Run {
+            max_games: None
+        }));
+    }
+
+    #[test]
+    fn model_override_replaces_settings_model_path() {
+        let mut settings = Settings {
+            model_path: "models/mortal".to_string(),
+            ..Settings::default()
+        };
+
+        apply_model_override(&mut settings, Some(Path::new("/tmp/custom-model")));
+
+        assert_eq!(settings.model_path, "/tmp/custom-model");
+    }
+
+    #[test]
+    fn global_model_argument_is_available_to_subcommands() {
+        let cli = Cli::try_parse_from([
+            "majsoul-autopilot-rs",
+            "--settings",
+            "settings.json",
+            "check-model",
+            "--model",
+            "/tmp/custom-model",
+        ])
+        .unwrap();
+
+        assert_eq!(cli.model.as_deref(), Some(Path::new("/tmp/custom-model")));
     }
 
     #[test]
