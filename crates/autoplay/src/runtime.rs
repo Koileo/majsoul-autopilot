@@ -8,7 +8,7 @@ use crate::{
         ModelDecision, PlannedAction, RuntimeStatus,
     },
     settings::{manual_target, validate_settings, ActionInterval, Settings},
-    table::TableTracker,
+    table::{TableSnapshot, TableTracker},
 };
 use anyhow::{anyhow, Context, Result};
 use liqi::pb;
@@ -269,6 +269,7 @@ pub async fn run_autoplay(
             ),
         );
 
+        let target_mode = client.summary.target_mode.clone();
         let (game, initial_events) = connect_or_match_game(
             &mut client,
             &sink,
@@ -279,6 +280,7 @@ pub async fn run_autoplay(
         let completed = match run_game_loop(
             game,
             initial_events,
+            &target_mode,
             &settings,
             &sink,
             stop_after_current_game.clone(),
@@ -452,6 +454,7 @@ async fn connect_or_match_game(
 async fn run_game_loop(
     mut game: session::GameSession,
     initial_events: Vec<bridge::Event>,
+    mode: &Mode,
     settings: &Settings,
     sink: &EventSink,
     stop_after_current_game: Arc<AtomicBool>,
@@ -474,6 +477,7 @@ async fn run_game_loop(
     let mut bot = NativeBot::new(game.bridge.seat() as u8, engine);
     let mut table = TableTracker::new(game.bridge.seat());
     let mut queue = VecDeque::new();
+    let mut waiting_for_new_round_since = None;
     if !initial_events.is_empty() {
         let mut last_action_json = None;
         for event in &initial_events {
@@ -483,7 +487,20 @@ async fn run_game_loop(
             }
             last_action_json = bot.react(event)?;
         }
-        if let Some(action_json) = last_action_json {
+        if initial_events.last().is_some_and(|event| {
+            should_confirm_new_round_after_event(mode, event, &VecDeque::new(), &table.snapshot())
+        }) {
+            queue.extend(confirm_new_round(&mut game, sink).await?);
+            waiting_for_new_round_since = Some(Instant::now());
+        } else if initial_events.last().is_some_and(|event| {
+            is_terminal_all_last_after_end_kyoku(mode, event, &table.snapshot())
+        }) {
+            emit_log(
+                sink,
+                LogLevel::Info,
+                "terminal hand ended; waiting for game end result",
+            );
+        } else if let Some(action_json) = last_action_json {
             emit_model_decision(sink, bot.last_decision());
             let ack_events =
                 handle_bot_action_json(&mut game, &mut bot, action_json, settings, sink).await?;
@@ -500,6 +517,17 @@ async fn run_game_loop(
             continue;
         };
 
+        if let Some(confirmed_at) = waiting_for_new_round_since.take() {
+            emit_log(
+                sink,
+                LogLevel::Info,
+                format!(
+                    "next round event arrived after {:.1}s: {}",
+                    confirmed_at.elapsed().as_secs_f64(),
+                    event_kind_label(&event)
+                ),
+            );
+        }
         emit_game_event(sink, &mut table, &event);
         if matches!(event, bridge::Event::EndGame) {
             if stop_after_current_game.load(Ordering::Relaxed) {
@@ -508,6 +536,21 @@ async fn run_game_loop(
                 });
             }
             return Ok(1);
+        }
+
+        let table_snapshot = table.snapshot();
+        if should_confirm_new_round_after_event(mode, &event, &queue, &table_snapshot) {
+            let _ = bot.react(&event)?;
+            queue.extend(confirm_new_round(&mut game, sink).await?);
+            waiting_for_new_round_since = Some(Instant::now());
+            continue;
+        }
+        if is_terminal_all_last_after_end_kyoku(mode, &event, &table_snapshot) {
+            emit_log(
+                sink,
+                LogLevel::Info,
+                "terminal hand ended; waiting for game end result",
+            );
         }
 
         let ack_events = handle_bot_event(&mut game, &mut bot, &event, settings, sink).await?;
@@ -802,6 +845,30 @@ async fn execute_pending_action(
     }
 }
 
+async fn confirm_new_round(
+    game: &mut session::GameSession,
+    sink: &EventSink,
+) -> Result<Vec<bridge::Event>> {
+    let started_at = Instant::now();
+    emit_log(sink, LogLevel::Info, "round ended; confirming new round");
+    check_common_error(game.confirm_new_round().await?, "confirmNewRound")?;
+    emit_log(
+        sink,
+        LogLevel::Info,
+        format!(
+            "confirmNewRound accepted in {}ms; waiting for next round event",
+            started_at.elapsed().as_millis()
+        ),
+    );
+    sink(CoreEvent::ActionAck {
+        ack: ActionAck {
+            ok: true,
+            message: "confirmNewRound accepted".to_string(),
+        },
+    });
+    Ok(Vec::new())
+}
+
 async fn wait_opening_round_discard_window(
     op_context: &bridge::OperationContext,
     sink: &EventSink,
@@ -987,6 +1054,62 @@ fn should_wait_for_riichi_auto_discard(
         && state.current_context.is_none()
         && state.operations.is_empty()
         && matches!(pending.action, BotAction::Dahai { .. })
+}
+
+fn should_confirm_new_round_after_event(
+    mode: &Mode,
+    event: &bridge::Event,
+    queued_events: &VecDeque<bridge::Event>,
+    table: &TableSnapshot,
+) -> bool {
+    matches!(event, bridge::Event::EndKyoku)
+        && !matches!(
+            queued_events.front(),
+            Some(bridge::Event::StartKyoku { .. } | bridge::Event::EndGame)
+        )
+        && !is_terminal_all_last_after_end_kyoku(mode, event, table)
+}
+
+fn is_terminal_all_last_after_end_kyoku(
+    mode: &Mode,
+    event: &bridge::Event,
+    table: &TableSnapshot,
+) -> bool {
+    matches!(event, bridge::Event::EndKyoku)
+        && is_all_last(mode, table)
+        && matches!(
+            table.last_event,
+            Some(bridge::Event::Hule { actor, .. }) if actor != table.oya
+        )
+}
+
+fn is_all_last(mode: &Mode, table: &TableSnapshot) -> bool {
+    match mode {
+        Mode::FourPlayerEast => table.bakaze == "E" && table.kyoku >= 4,
+        Mode::FourPlayerSouth => table.bakaze == "S" && table.kyoku >= 4,
+    }
+}
+
+fn event_kind_label(event: &bridge::Event) -> &'static str {
+    match event {
+        bridge::Event::StartGame { .. } => "start_game",
+        bridge::Event::StartKyoku { .. } => "start_kyoku",
+        bridge::Event::Tsumo { .. } => "tsumo",
+        bridge::Event::Reach { .. } => "reach",
+        bridge::Event::ReachAccepted { .. } => "reach_accepted",
+        bridge::Event::Dahai { .. } => "dahai",
+        bridge::Event::Chi { .. } => "chi",
+        bridge::Event::Pon { .. } => "pon",
+        bridge::Event::Daiminkan { .. } => "daiminkan",
+        bridge::Event::Ankan { .. } => "ankan",
+        bridge::Event::Kakan { .. } => "kakan",
+        bridge::Event::Dora { .. } => "dora",
+        bridge::Event::Hule { .. } => "hule",
+        bridge::Event::NoTile { .. } => "no_tile",
+        bridge::Event::LiuJu { .. } => "liu_ju",
+        bridge::Event::EndKyoku => "end_kyoku",
+        bridge::Event::EndGame => "end_game",
+    }
 }
 
 fn string_field(value: &Value, key: &str) -> String {
@@ -1311,5 +1434,105 @@ mod tests {
         assert!(!should_wait_for_riichi_auto_discard(
             &pending, &state, false
         ));
+    }
+
+    #[test]
+    fn end_kyoku_with_no_following_round_state_needs_confirm_new_round() {
+        let queue = VecDeque::new();
+
+        assert!(should_confirm_new_round_after_event(
+            &Mode::FourPlayerSouth,
+            &bridge::Event::EndKyoku,
+            &queue,
+            &TableTracker::new(0).snapshot()
+        ));
+    }
+
+    #[test]
+    fn restored_end_kyoku_before_start_kyoku_does_not_confirm_again() {
+        let mut queue = VecDeque::new();
+        queue.push_back(bridge::Event::StartKyoku {
+            bakaze: "E".to_string(),
+            dora_marker: "1m".to_string(),
+            honba: 0,
+            kyoku: 1,
+            kyotaku: 0,
+            oya: 0,
+            scores: vec![25000; 4],
+            tehais: vec![vec![]; 4],
+        });
+
+        assert!(!should_confirm_new_round_after_event(
+            &Mode::FourPlayerSouth,
+            &bridge::Event::EndKyoku,
+            &queue,
+            &TableTracker::new(0).snapshot()
+        ));
+    }
+
+    #[test]
+    fn restored_end_kyoku_before_end_game_does_not_confirm_again() {
+        let mut queue = VecDeque::new();
+        queue.push_back(bridge::Event::EndGame);
+
+        assert!(!should_confirm_new_round_after_event(
+            &Mode::FourPlayerSouth,
+            &bridge::Event::EndKyoku,
+            &queue,
+            &TableTracker::new(0).snapshot()
+        ));
+    }
+
+    #[test]
+    fn south_four_non_dealer_hule_does_not_confirm_new_round() {
+        let mut table = TableTracker::new(1);
+        table.apply(&bridge::Event::StartKyoku {
+            bakaze: "S".to_string(),
+            dora_marker: "5m".to_string(),
+            honba: 0,
+            kyoku: 4,
+            kyotaku: 0,
+            oya: 3,
+            scores: vec![21_300, 15_400, 31_000, 32_300],
+            tehais: vec![vec![]; 4],
+        });
+        table.apply(&bridge::Event::Hule {
+            actor: 2,
+            target: Some(1),
+            pai: "2m".to_string(),
+            zimo: false,
+            title: String::new(),
+            count: 2,
+            fu: 30,
+            fans: Vec::new(),
+            point_sum: 26_300,
+            hand: vec![],
+            ming: vec![],
+        });
+
+        assert!(!should_confirm_new_round_after_event(
+            &Mode::FourPlayerSouth,
+            &bridge::Event::EndKyoku,
+            &VecDeque::new(),
+            &table.snapshot()
+        ));
+    }
+
+    #[test]
+    fn event_kind_label_names_round_transition_events() {
+        assert_eq!(
+            event_kind_label(&bridge::Event::StartKyoku {
+                bakaze: "E".to_string(),
+                dora_marker: "1m".to_string(),
+                honba: 0,
+                kyoku: 1,
+                kyotaku: 0,
+                oya: 0,
+                scores: vec![25000; 4],
+                tehais: vec![vec![]; 4],
+            }),
+            "start_kyoku"
+        );
+        assert_eq!(event_kind_label(&bridge::Event::EndGame), "end_game");
     }
 }

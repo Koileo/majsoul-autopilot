@@ -71,7 +71,23 @@ pub async fn check_login(username: &str, password: &str, device_id: &str) -> Res
 
 impl ProtocolClient {
     pub async fn login(username: &str, password: &str, device_id: &str) -> Result<Self> {
-        let (route_id, url) = first_lobby_route()?;
+        let mut last_error = None;
+        for (route_id, url) in lobby_route_options()? {
+            match Self::login_on_route(username, password, device_id, route_id, &url).await {
+                Ok(client) => return Ok(client),
+                Err(err) => last_error = Some(err),
+            }
+        }
+        Err(last_error.unwrap_or_else(|| anyhow!("login failed for all lobby routes")))
+    }
+
+    async fn login_on_route(
+        username: &str,
+        password: &str,
+        device_id: &str,
+        route_id: String,
+        url: &str,
+    ) -> Result<Self> {
         let mut socket = LiqiSocket::connect(&url).await?;
         let now_ms = current_time_millis();
         socket
@@ -384,6 +400,12 @@ impl GameSession {
             .await
     }
 
+    pub async fn confirm_new_round(&mut self) -> Result<pb::ResCommon> {
+        self.socket
+            .request(".lq.FastTest.confirmNewRound", &pb::ReqCommon {})
+            .await
+    }
+
     pub async fn skip(&mut self) -> Result<pb::ResCommon> {
         self.input_chi_peng_gang(pb::ReqChiPengGang {
             cancel_operation: true,
@@ -495,15 +517,19 @@ fn parse_action_notify(bridge: &mut Bridge, raw: &[u8]) -> Result<Option<Vec<Eve
     Ok(Some(bridge.handle_action(&action.name, &action.data)?))
 }
 
-fn first_lobby_route() -> Result<(String, String)> {
-    let (route_id, url) = lobby_ws_url_candidates()
+fn lobby_route_options() -> Result<Vec<(String, String)>> {
+    let routes = lobby_ws_url_candidates()
         .into_iter()
-        .find_map(|url| {
+        .map(|url| {
             let route_id = url.split("://").nth(1)?.split('.').next()?.to_string();
             Some((route_id, url))
         })
-        .ok_or_else(|| anyhow!("no lobby route candidates"))?;
-    Ok((route_id, url))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| anyhow!("invalid lobby route candidates"))?;
+    if routes.is_empty() {
+        return Err(anyhow!("no lobby route candidates"));
+    }
+    Ok(routes)
 }
 
 fn login_summary(response: pb::ResLogin) -> Result<LoginSummary> {
@@ -628,5 +654,36 @@ mod tests {
         let mut bridge = Bridge::new(0);
         let events = parse_action_notify(&mut bridge, &raw).unwrap().unwrap();
         assert_eq!(events, vec![Event::EndGame]);
+    }
+
+    #[test]
+    fn lobby_route_options_preserve_fallback_routes() {
+        let routes = lobby_route_options().unwrap();
+
+        assert_eq!(
+            routes,
+            vec![
+                (
+                    "route-2".to_string(),
+                    "wss://route-2.maj-soul.com:443/gateway".to_string()
+                ),
+                (
+                    "route-3".to_string(),
+                    "wss://route-3.maj-soul.com:8443/gateway".to_string()
+                ),
+                (
+                    "route-4".to_string(),
+                    "wss://route-4.maj-soul.com:443/gateway".to_string()
+                ),
+                (
+                    "route-5".to_string(),
+                    "wss://route-5.maj-soul.com:443/gateway".to_string()
+                ),
+                (
+                    "route-6".to_string(),
+                    "wss://route-6.maj-soul.com:443/gateway".to_string()
+                ),
+            ]
+        );
     }
 }

@@ -149,7 +149,10 @@ impl TableTracker {
                 pai,
                 tsumogiri,
             } => {
-                let riichi = self.pending_riichi_discard.take() == Some(*actor);
+                let riichi = self.pending_riichi_discard == Some(*actor);
+                if riichi {
+                    self.pending_riichi_discard = None;
+                }
                 if let Some(player) = self.player_mut(*actor) {
                     player.hand_count = player.hand_count.saturating_sub(1);
                     if player.is_self {
@@ -227,13 +230,19 @@ impl TableTracker {
             bridge::Event::Dora { markers } => {
                 self.snapshot.dora_markers = markers.clone();
             }
-            bridge::Event::Hule { .. } | bridge::Event::NoTile { .. } | bridge::Event::LiuJu { .. } => {}
+            bridge::Event::Hule { .. }
+            | bridge::Event::NoTile { .. }
+            | bridge::Event::LiuJu { .. } => {}
             bridge::Event::EndKyoku | bridge::Event::EndGame | bridge::Event::StartGame { .. } => {}
         }
         if !matches!(event, bridge::Event::EndKyoku)
             || !matches!(
                 self.snapshot.last_event,
-                Some(bridge::Event::Hule { .. } | bridge::Event::NoTile { .. } | bridge::Event::LiuJu { .. })
+                Some(
+                    bridge::Event::Hule { .. }
+                        | bridge::Event::NoTile { .. }
+                        | bridge::Event::LiuJu { .. }
+                )
             )
         {
             self.snapshot.last_event = Some(event.clone());
@@ -324,7 +333,8 @@ impl TableTracker {
                 .last()
                 .is_some_and(|discard| tile_without_red(&discard.tile) == tile_without_red(tile))
             {
-                removed_riichi_discard = player.discards.pop().is_some_and(|discard| discard.riichi);
+                removed_riichi_discard =
+                    player.discards.pop().is_some_and(|discard| discard.riichi);
             } else if let Some(index) = player
                 .discards
                 .iter()
@@ -441,6 +451,45 @@ mod tests {
             pai: "4p".to_string(),
             consumed: vec!["4p".to_string(), "4p".to_string()],
         });
+
+        let snapshot = tracker.apply(&bridge::Event::Dahai {
+            actor: 0,
+            pai: "P".to_string(),
+            tsumogiri: false,
+        });
+
+        assert_eq!(
+            snapshot.players[0]
+                .discards
+                .iter()
+                .map(|discard| (discard.tile.as_str(), discard.riichi))
+                .collect::<Vec<_>>(),
+            vec![("P", true)]
+        );
+    }
+
+    #[test]
+    fn called_riichi_discard_marker_survives_other_players_discards() {
+        let mut tracker = TableTracker::new(0);
+        tracker.apply(&start_event());
+        tracker.apply(&bridge::Event::Reach { actor: 0 });
+        tracker.apply(&bridge::Event::Dahai {
+            actor: 0,
+            pai: "4p".to_string(),
+            tsumogiri: false,
+        });
+        tracker.apply(&bridge::Event::Pon {
+            actor: 1,
+            target: 0,
+            pai: "4p".to_string(),
+            consumed: vec!["4p".to_string(), "4p".to_string()],
+        });
+        let intermediate = tracker.apply(&bridge::Event::Dahai {
+            actor: 1,
+            pai: "3s".to_string(),
+            tsumogiri: false,
+        });
+        assert!(!intermediate.players[1].discards.last().unwrap().riichi);
 
         let snapshot = tracker.apply(&bridge::Event::Dahai {
             actor: 0,
@@ -610,7 +659,10 @@ mod tests {
             vec!["3s"]
         );
         assert_eq!(snapshot.players[1].melds[0].target, Some(2));
-        assert_eq!(snapshot.players[1].melds[0].called_tile.as_deref(), Some("4s"));
+        assert_eq!(
+            snapshot.players[1].melds[0].called_tile.as_deref(),
+            Some("4s")
+        );
     }
 
     #[test]
