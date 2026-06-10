@@ -2,7 +2,7 @@ use hmac::{Hmac, Mac};
 use liqi::pb;
 use sha2::Sha256;
 
-pub const RESOURCE_VERSION: &str = "0.16.229";
+pub const RESOURCE_VERSION: &str = "0.16.231";
 pub const PACKAGE_VERSION: &str = "4.0.44";
 pub const LOGIN_BEAT_CONTRACT: &str = "DF2vkXCnfeXp4WoGrBGNcJBufZiMN3uP";
 
